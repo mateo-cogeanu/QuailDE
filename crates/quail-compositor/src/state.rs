@@ -13,6 +13,10 @@ pub struct CompositorState {
     pub shell: ShellSurfaceState,
     pub listening_socket: String,
     pub connected_clients: usize,
+    pub advertised_globals: usize,
+    pub bound_globals: usize,
+    pub surface_commits: usize,
+    pub surface_frames_requested: usize,
 }
 
 impl CompositorState {
@@ -25,6 +29,10 @@ impl CompositorState {
             shell: ShellSurfaceState::placeholder(),
             listening_socket: "not bound".to_string(),
             connected_clients: 0,
+            advertised_globals: 0,
+            bound_globals: 0,
+            surface_commits: 0,
+            surface_frames_requested: 0,
         }
     }
 
@@ -37,7 +45,7 @@ impl CompositorState {
         ]
     }
 
-    pub fn summary_lines(&self) -> [String; 8] {
+    pub fn summary_lines(&self) -> [String; 12] {
         [
             format!("  session: {}", self.session_name),
             format!("  stage: {}", self.stage),
@@ -50,6 +58,13 @@ impl CompositorState {
             ),
             format!("  wayland socket: {}", self.listening_socket),
             format!("  connected clients: {}", self.connected_clients),
+            format!("  advertised globals: {}", self.advertised_globals),
+            format!("  bound globals: {}", self.bound_globals),
+            format!("  surface commits: {}", self.surface_commits),
+            format!(
+                "  frame callbacks requested: {}",
+                self.surface_frames_requested
+            ),
         ]
     }
 }

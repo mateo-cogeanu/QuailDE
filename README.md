@@ -61,6 +61,8 @@ The example config lives at [`quailde.example.toml`](quailde.example.toml). The 
 
 QuailDE now includes a bundled compositor placeholder at [`crates/quail-compositor`](crates/quail-compositor). It is not a real Wayland compositor yet, but it gives the session bootstrap a Quail-owned runtime target and defines the next boundary we should implement.
 
+The compositor crate now has explicit modules for backend, output, shell-surface, and overall runtime state so we can replace placeholders with real Wayland pieces incrementally instead of rewriting one large file later.
+
 ## Near-term roadmap
 
 - create a real session process and lifecycle manager

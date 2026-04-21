@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 use clap::Parser;
+use quail_compositor::state::CompositorState;
 
 #[derive(Debug, Parser)]
 #[command(
@@ -22,19 +23,17 @@ struct Cli {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
+    let state = CompositorState::bootstrap(cli.session);
 
     println!("quail-compositor boot");
-    println!("  session: {}", cli.session);
-    println!("  stage: skeleton");
-    println!("  renderer: not connected");
-    println!("  outputs: not enumerated");
-    println!("  shell surface: not attached");
+    for line in state.summary_lines() {
+        println!("{line}");
+    }
     println!();
     println!("Startup phases:");
-    println!("  1. initialize Wayland display");
-    println!("  2. create renderer backend");
-    println!("  3. register input and output state");
-    println!("  4. attach shell surfaces");
+    for (index, phase) in state.startup_phases().iter().enumerate() {
+        println!("  {}. {}", index + 1, phase);
+    }
 
     if cli.once {
         println!();
@@ -43,6 +42,8 @@ fn main() -> Result<()> {
     }
 
     println!();
+    // Keep the process alive so the session bootstrap can supervise it like a
+    // long-lived compositor while the real backend is still under construction.
     println!("Compositor skeleton is alive. Waiting for the real backend implementation.");
 
     loop {

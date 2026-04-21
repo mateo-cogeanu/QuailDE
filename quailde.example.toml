@@ -1,0 +1,22 @@
+session_name = "QuailDE"
+
+[runtime]
+target = "wayland-session"
+dry_run = true
+
+[launch.compositor]
+name = "compositor"
+command = "quail-compositor"
+args = ["--session", "QuailDE"]
+optional = false
+
+[[launch.services]]
+name = "notifications"
+command = "mako"
+optional = true
+
+[[launch.services]]
+name = "wallpaper"
+command = "swaybg"
+args = ["-c", "#101820"]
+optional = true

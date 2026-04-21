@@ -17,6 +17,12 @@ pub struct CompositorState {
     pub bound_globals: usize,
     pub surface_commits: usize,
     pub surface_frames_requested: usize,
+    pub surface_buffer_attaches: usize,
+    pub shm_pools_created: usize,
+    pub shm_buffers_created: usize,
+    pub buffer_destroy_requests: usize,
+    pub last_shm_pool_size: i32,
+    pub last_buffer_dimensions: String,
 }
 
 impl CompositorState {
@@ -33,6 +39,12 @@ impl CompositorState {
             bound_globals: 0,
             surface_commits: 0,
             surface_frames_requested: 0,
+            surface_buffer_attaches: 0,
+            shm_pools_created: 0,
+            shm_buffers_created: 0,
+            buffer_destroy_requests: 0,
+            last_shm_pool_size: 0,
+            last_buffer_dimensions: "none".to_string(),
         }
     }
 
@@ -45,7 +57,7 @@ impl CompositorState {
         ]
     }
 
-    pub fn summary_lines(&self) -> [String; 12] {
+    pub fn summary_lines(&self) -> [String; 18] {
         [
             format!("  session: {}", self.session_name),
             format!("  stage: {}", self.stage),
@@ -62,9 +74,21 @@ impl CompositorState {
             format!("  bound globals: {}", self.bound_globals),
             format!("  surface commits: {}", self.surface_commits),
             format!(
+                "  surface buffer attaches: {}",
+                self.surface_buffer_attaches
+            ),
+            format!(
                 "  frame callbacks requested: {}",
                 self.surface_frames_requested
             ),
+            format!("  shm pools created: {}", self.shm_pools_created),
+            format!("  shm buffers created: {}", self.shm_buffers_created),
+            format!(
+                "  buffer destroy requests: {}",
+                self.buffer_destroy_requests
+            ),
+            format!("  last shm pool size: {}", self.last_shm_pool_size),
+            format!("  last buffer dimensions: {}", self.last_buffer_dimensions),
         ]
     }
 }

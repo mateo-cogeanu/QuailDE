@@ -73,6 +73,8 @@ That command initializes `wl_display`, binds a `quailde-*` socket, reports the s
 
 QuailDE also now advertises a real `wl_compositor` global and can initialize `wl_surface`, `wl_region`, and frame callback objects. It still does not render yet, but clients can begin binding core objects against the server.
 
+The next protocol layer is now present too: QuailDE advertises `wl_shm`, accepts shared-memory pool creation, and tracks `wl_buffer` objects. That means clients can start negotiating software-rendered buffers with the compositor, even though QuailDE still does not paint them yet.
+
 ## Near-term roadmap
 
 - create a real session process and lifecycle manager

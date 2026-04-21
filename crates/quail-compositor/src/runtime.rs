@@ -3,10 +3,10 @@ use std::thread;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use wayland_server::protocol::wl_compositor::WlCompositor;
+use wayland_server::protocol::{wl_compositor::WlCompositor, wl_shm::WlShm};
 use wayland_server::{Display, ListeningSocket};
 
-use crate::protocol::CompositorGlobal;
+use crate::protocol::{CompositorGlobal, ShmGlobal};
 use crate::state::CompositorState;
 
 /// RuntimeOptions contains the knobs that shape a single compositor process.
@@ -34,7 +34,10 @@ pub fn run_runtime(options: RuntimeOptions) -> Result<RuntimeReport> {
     display
         .handle()
         .create_global::<CompositorState, WlCompositor, _>(6, CompositorGlobal);
-    state.advertised_globals = 1;
+    display
+        .handle()
+        .create_global::<CompositorState, WlShm, _>(2, ShmGlobal);
+    state.advertised_globals = 2;
     let socket = ListeningSocket::bind_auto(&options.socket_prefix, 1..=32)
         .context("failed to bind a Wayland listening socket")?;
     let socket_name = socket

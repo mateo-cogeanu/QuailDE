@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 use clap::Parser;
-use quail_compositor::state::CompositorState;
+use quail_compositor::runtime::{RuntimeOptions, run_runtime};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -16,6 +16,10 @@ struct Cli {
     #[arg(long, default_value = "QuailDE")]
     session: String,
 
+    /// Socket prefix used when binding the Wayland display
+    #[arg(long, default_value = "quailde")]
+    socket_prefix: String,
+
     /// Run initialization once and exit instead of holding the process open
     #[arg(long)]
     once: bool,
@@ -23,7 +27,12 @@ struct Cli {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    let state = CompositorState::bootstrap(cli.session);
+    let report = run_runtime(RuntimeOptions {
+        session_name: cli.session,
+        socket_prefix: cli.socket_prefix,
+        once: cli.once,
+    })?;
+    let state = report.state;
 
     println!("quail-compositor boot");
     for line in state.summary_lines() {
@@ -42,10 +51,10 @@ fn main() -> Result<()> {
     }
 
     println!();
-    // Keep the process alive so the session bootstrap can supervise it like a
-    // long-lived compositor while the real backend is still under construction.
-    println!("Compositor skeleton is alive. Waiting for the real backend implementation.");
+    println!("Compositor bootstrap is alive. Waiting for clients on the Wayland socket.");
 
+    // The runtime loop is entered before this point when `--once` is not used.
+    // This fallback is unreachable today, but keeps control flow explicit.
     loop {
         thread::sleep(Duration::from_secs(60));
     }

@@ -11,6 +11,8 @@ pub struct CompositorState {
     pub backend: BackendStatus,
     pub outputs: OutputState,
     pub shell: ShellSurfaceState,
+    pub listening_socket: String,
+    pub connected_clients: usize,
 }
 
 impl CompositorState {
@@ -21,6 +23,8 @@ impl CompositorState {
             backend: BackendStatus::placeholder(),
             outputs: OutputState::placeholder(),
             shell: ShellSurfaceState::placeholder(),
+            listening_socket: "not bound".to_string(),
+            connected_clients: 0,
         }
     }
 
@@ -33,7 +37,7 @@ impl CompositorState {
         ]
     }
 
-    pub fn summary_lines(&self) -> [String; 6] {
+    pub fn summary_lines(&self) -> [String; 8] {
         [
             format!("  session: {}", self.session_name),
             format!("  stage: {}", self.stage),
@@ -44,6 +48,8 @@ impl CompositorState {
                 "  shell surface: {} ({})",
                 self.shell.primary_surface, self.shell.layer_shell
             ),
+            format!("  wayland socket: {}", self.listening_socket),
+            format!("  connected clients: {}", self.connected_clients),
         ]
     }
 }

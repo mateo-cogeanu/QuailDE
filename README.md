@@ -75,6 +75,8 @@ QuailDE also now advertises a real `wl_compositor` global and can initialize `wl
 
 The next protocol layer is now present too: QuailDE advertises `wl_shm`, accepts shared-memory pool creation, and tracks `wl_buffer` objects. That means clients can start negotiating software-rendered buffers with the compositor, even though QuailDE still does not paint them yet.
 
+QuailDE now also remembers pending and committed surface buffer state. That is the first real scene-management step toward a software renderer, because buffer attachments are no longer thrown away immediately after the request is parsed.
+
 ## Near-term roadmap
 
 - create a real session process and lifecycle manager

@@ -23,6 +23,9 @@ pub struct CompositorState {
     pub buffer_destroy_requests: usize,
     pub last_shm_pool_size: i32,
     pub last_buffer_dimensions: String,
+    pub tracked_surfaces: usize,
+    pub mapped_surfaces: usize,
+    pub last_committed_surface: String,
 }
 
 impl CompositorState {
@@ -45,6 +48,9 @@ impl CompositorState {
             buffer_destroy_requests: 0,
             last_shm_pool_size: 0,
             last_buffer_dimensions: "none".to_string(),
+            tracked_surfaces: 0,
+            mapped_surfaces: 0,
+            last_committed_surface: "none".to_string(),
         }
     }
 
@@ -57,7 +63,7 @@ impl CompositorState {
         ]
     }
 
-    pub fn summary_lines(&self) -> [String; 18] {
+    pub fn summary_lines(&self) -> [String; 21] {
         [
             format!("  session: {}", self.session_name),
             format!("  stage: {}", self.stage),
@@ -89,6 +95,9 @@ impl CompositorState {
             ),
             format!("  last shm pool size: {}", self.last_shm_pool_size),
             format!("  last buffer dimensions: {}", self.last_buffer_dimensions),
+            format!("  tracked surfaces: {}", self.tracked_surfaces),
+            format!("  mapped surfaces: {}", self.mapped_surfaces),
+            format!("  last committed surface: {}", self.last_committed_surface),
         ]
     }
 }

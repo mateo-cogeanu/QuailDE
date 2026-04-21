@@ -4,15 +4,20 @@ use wayland_server::protocol::{
     wl_buffer::WlBuffer, wl_callback::WlCallback, wl_compositor::WlCompositor, wl_region::WlRegion,
     wl_shm::Format as ShmFormat, wl_shm::WlShm, wl_shm_pool::WlShmPool, wl_surface::WlSurface,
 };
-use wayland_server::{Client, DataInit, Dispatch, DisplayHandle, GlobalDispatch, New, WEnum};
+use wayland_server::{
+    Client, DataInit, Dispatch, DisplayHandle, GlobalDispatch, New, Resource, WEnum,
+};
 
+use crate::scene::{BufferSnapshot, SurfaceSlots};
 use crate::state::CompositorState;
 
 #[derive(Debug, Clone, Copy)]
 pub struct CompositorGlobal;
 
-#[derive(Debug, Clone, Copy)]
-pub struct SurfaceState;
+#[derive(Debug)]
+pub struct SurfaceState {
+    pub slots: Mutex<SurfaceSlots>,
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct RegionState;
@@ -70,7 +75,13 @@ impl Dispatch<WlCompositor, CompositorGlobal> for CompositorState {
             // A compositor must at least let clients create surfaces to be
             // protocol-correct enough for higher layers to grow on top.
             wayland_server::protocol::wl_compositor::Request::CreateSurface { id } => {
-                data_init.init(id, SurfaceState);
+                data_init.init(
+                    id,
+                    SurfaceState {
+                        slots: Mutex::new(SurfaceSlots::default()),
+                    },
+                );
+                _state.tracked_surfaces += 1;
             }
             // Regions are part of the core surface state API, so we expose a
             // no-op implementation early instead of rejecting the request.
@@ -135,7 +146,7 @@ impl Dispatch<WlSurface, SurfaceState> for CompositorState {
         _client: &Client,
         _resource: &WlSurface,
         request: wayland_server::protocol::wl_surface::Request,
-        _data: &SurfaceState,
+        data: &SurfaceState,
         _dhandle: &DisplayHandle,
         data_init: &mut DataInit<'_, Self>,
     ) {
@@ -145,10 +156,28 @@ impl Dispatch<WlSurface, SurfaceState> for CompositorState {
                 state.surface_frames_requested += 1;
             }
             wayland_server::protocol::wl_surface::Request::Commit => {
+                let mut slots = data.slots.lock().expect("surface slots poisoned");
+                if let Some(buffer) = slots.pending_buffer.clone() {
+                    slots.committed_buffer = Some(buffer.clone());
+                    state.mapped_surfaces += 1;
+                    state.last_committed_surface = format!(
+                        "surface-{} => buffer-{} {}x{} {}",
+                        _resource.id().protocol_id(),
+                        buffer.object_id,
+                        buffer.width,
+                        buffer.height,
+                        buffer.format_name
+                    );
+                }
+                slots.commit_count += 1;
                 state.surface_commits += 1;
             }
             wayland_server::protocol::wl_surface::Request::Attach { buffer, .. } => {
-                if buffer.is_some() {
+                if let Some(snapshot) = buffer.and_then(buffer_snapshot) {
+                    data.slots
+                        .lock()
+                        .expect("surface slots poisoned")
+                        .pending_buffer = Some(snapshot);
                     state.surface_buffer_attaches += 1;
                 }
             }
@@ -256,4 +285,15 @@ fn shm_format_name(format: WEnum<ShmFormat>) -> String {
         // code for future debugging instead of rejecting them too early.
         WEnum::Unknown(raw) => format!("unknown-{raw}"),
     }
+}
+
+fn buffer_snapshot(buffer: WlBuffer) -> Option<BufferSnapshot> {
+    let data = buffer.data::<BufferState>()?;
+    Some(BufferSnapshot {
+        object_id: buffer.id().protocol_id(),
+        width: data.width,
+        height: data.height,
+        stride: data.stride,
+        format_name: data.format_name.clone(),
+    })
 }

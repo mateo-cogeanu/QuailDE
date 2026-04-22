@@ -99,12 +99,14 @@ On a Linux VM with no desktop environment, you can now try the first visible Qua
 
 ```bash
 cargo build --workspace
-sudo XDG_RUNTIME_DIR=/tmp/quailde-runtime cargo run -p quail-compositor -- --session QuailDE --backend raw --framebuffer /dev/fb0 --input-dir /dev/input
+sudo mkdir -p /tmp/quailde-runtime
+sudo XDG_RUNTIME_DIR=/tmp/quailde-runtime ./target/debug/quail-compositor --session QuailDE --backend raw --framebuffer /dev/fb0 --input-dir /dev/input
 ```
 
 Notes:
 
 - this raw live path currently targets Linux `fbdev` plus `evdev`
+- QuailDE now switches the active Linux tty into graphics mode while it runs, then restores text mode on exit
 - press `Esc` to exit
 - arrow keys also move the software cursor if mouse input is unavailable
 - some VMs or kernels may not expose `/dev/fb0`; this is the first visible backend, not the final output architecture

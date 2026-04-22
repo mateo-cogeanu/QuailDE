@@ -15,6 +15,9 @@ mod platform {
 
     const FBIOGET_VSCREENINFO: libc::c_ulong = 0x4600;
     const FBIOGET_FSCREENINFO: libc::c_ulong = 0x4602;
+    const KDSETMODE: libc::c_ulong = 0x4B3A;
+    const KD_TEXT: libc::c_ulong = 0x00;
+    const KD_GRAPHICS: libc::c_ulong = 0x01;
 
     const EV_KEY: u16 = 0x01;
     const EV_REL: u16 = 0x02;
@@ -101,8 +104,13 @@ mod platform {
     /// LinuxPlatform owns the first visible raw Linux backend for QuailDE:
     /// fbdev for pixels and evdev for mouse/keyboard input.
     pub struct LinuxPlatform {
+        console: ConsoleModeGuard,
         framebuffer: LinuxFramebuffer,
         input_devices: Vec<InputDevice>,
+    }
+
+    struct ConsoleModeGuard {
+        file: File,
     }
 
     struct LinuxFramebuffer {
@@ -125,6 +133,7 @@ mod platform {
             framebuffer_path: &Path,
             input_dir: &Path,
         ) -> Result<Self> {
+            let console = ConsoleModeGuard::enter_graphics_mode()?;
             let framebuffer = LinuxFramebuffer::open(framebuffer_path)?;
             let input_devices = discover_input_devices(input_dir)?;
 
@@ -144,6 +153,7 @@ mod platform {
             state.backend.input = "evdev pointer and keyboard";
 
             Ok(Self {
+                console,
                 framebuffer,
                 input_devices,
             })
@@ -191,6 +201,41 @@ mod platform {
             }
 
             Ok(())
+        }
+    }
+
+    impl ConsoleModeGuard {
+        fn enter_graphics_mode() -> Result<Self> {
+            let file = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open("/dev/tty")
+                .or_else(|_| {
+                    OpenOptions::new()
+                        .read(true)
+                        .write(true)
+                        .open("/dev/console")
+                })
+                .context("failed to open active Linux console for graphics mode")?;
+
+            // The Linux text console keeps drawing characters until the tty is
+            // switched into graphics mode, so QuailDE must claim that mode
+            // before its framebuffer output can stay visible.
+            let status = unsafe { libc::ioctl(file.as_raw_fd(), KDSETMODE, KD_GRAPHICS) };
+            if status < 0 {
+                return Err(std::io::Error::last_os_error())
+                    .context("failed to switch Linux console into graphics mode");
+            }
+
+            Ok(Self { file })
+        }
+    }
+
+    impl Drop for ConsoleModeGuard {
+        fn drop(&mut self) {
+            // Restoring text mode makes sure the Linux tty comes back after
+            // QuailDE exits, even if the compositor returns early on error.
+            let _ = unsafe { libc::ioctl(self.file.as_raw_fd(), KDSETMODE, KD_TEXT) };
         }
     }
 

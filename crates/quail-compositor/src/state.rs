@@ -32,6 +32,18 @@ pub struct CompositorState {
     pub composed_height: i32,
     pub last_frame_checksum: u64,
     pub last_frame_painted_surfaces: usize,
+    pub xdg_surfaces_created: usize,
+    pub xdg_toplevels_created: usize,
+    pub xdg_popups_created: usize,
+    pub xdg_last_acked_serial: u32,
+    pub last_xdg_configure_serial: u32,
+    pub last_xdg_pong: u32,
+    pub xdg_ack_count: usize,
+    pub last_xdg_surface: String,
+    pub last_window_geometry: String,
+    pub last_toplevel_title: String,
+    pub last_toplevel_app_id: String,
+    pub next_serial: u32,
 }
 
 impl CompositorState {
@@ -62,6 +74,18 @@ impl CompositorState {
             composed_height: 720,
             last_frame_checksum: 0,
             last_frame_painted_surfaces: 0,
+            xdg_surfaces_created: 0,
+            xdg_toplevels_created: 0,
+            xdg_popups_created: 0,
+            xdg_last_acked_serial: 0,
+            last_xdg_configure_serial: 0,
+            last_xdg_pong: 0,
+            xdg_ack_count: 0,
+            last_xdg_surface: "none".to_string(),
+            last_window_geometry: "none".to_string(),
+            last_toplevel_title: "none".to_string(),
+            last_toplevel_app_id: "none".to_string(),
+            next_serial: 0,
         }
     }
 
@@ -118,6 +142,20 @@ impl CompositorState {
                 "  painted surfaces in last frame: {}",
                 self.last_frame_painted_surfaces
             ),
+            format!("  xdg surfaces created: {}", self.xdg_surfaces_created),
+            format!("  xdg toplevels created: {}", self.xdg_toplevels_created),
+            format!("  xdg popups created: {}", self.xdg_popups_created),
+            format!(
+                "  xdg last configure serial: {}",
+                self.last_xdg_configure_serial
+            ),
+            format!("  xdg last ack serial: {}", self.xdg_last_acked_serial),
+            format!("  xdg ack count: {}", self.xdg_ack_count),
+            format!("  xdg last pong serial: {}", self.last_xdg_pong),
+            format!("  last xdg surface: {}", self.last_xdg_surface),
+            format!("  last window geometry: {}", self.last_window_geometry),
+            format!("  last toplevel title: {}", self.last_toplevel_title),
+            format!("  last toplevel app id: {}", self.last_toplevel_app_id),
         ]
     }
 }

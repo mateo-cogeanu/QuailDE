@@ -3,6 +3,10 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::Context;
 use memmap2::MmapOptions;
+use wayland_protocols::xdg::shell::server::{
+    xdg_popup::XdgPopup, xdg_positioner::XdgPositioner, xdg_surface::XdgSurface,
+    xdg_toplevel::XdgToplevel, xdg_wm_base::XdgWmBase,
+};
 use wayland_server::protocol::{
     wl_buffer::WlBuffer, wl_callback::WlCallback, wl_compositor::WlCompositor, wl_region::WlRegion,
     wl_shm::Format as ShmFormat, wl_shm::WlShm, wl_shm_pool::WlShmPool, wl_surface::WlSurface,
@@ -31,6 +35,23 @@ pub struct FrameCallbackState;
 
 #[derive(Debug, Clone, Copy)]
 pub struct ShmGlobal;
+
+#[derive(Debug, Clone, Copy)]
+pub struct XdgWmBaseGlobal;
+
+#[derive(Debug, Clone, Copy)]
+pub struct XdgPositionerState;
+
+#[derive(Debug, Clone)]
+pub struct XdgSurfaceState {
+    pub wl_surface_id: u32,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct XdgToplevelState;
+
+#[derive(Debug, Clone, Copy)]
+pub struct XdgPopupState;
 
 #[derive(Debug)]
 pub struct ShmPoolState {
@@ -124,6 +145,20 @@ impl GlobalDispatch<WlShm, ShmGlobal> for CompositorState {
     }
 }
 
+impl GlobalDispatch<XdgWmBase, XdgWmBaseGlobal> for CompositorState {
+    fn bind(
+        state: &mut Self,
+        _handle: &DisplayHandle,
+        _client: &Client,
+        resource: New<XdgWmBase>,
+        _global_data: &XdgWmBaseGlobal,
+        data_init: &mut DataInit<'_, Self>,
+    ) {
+        data_init.init(resource, XdgWmBaseGlobal);
+        state.bound_globals += 1;
+    }
+}
+
 impl Dispatch<WlShm, ShmGlobal> for CompositorState {
     fn request(
         state: &mut Self,
@@ -158,6 +193,48 @@ impl Dispatch<WlShm, ShmGlobal> for CompositorState {
                 }
             }
             _ => {}
+        }
+    }
+}
+
+impl Dispatch<XdgWmBase, XdgWmBaseGlobal> for CompositorState {
+    fn request(
+        state: &mut Self,
+        _client: &Client,
+        resource: &XdgWmBase,
+        request: wayland_protocols::xdg::shell::server::xdg_wm_base::Request,
+        _data: &XdgWmBaseGlobal,
+        _dhandle: &DisplayHandle,
+        data_init: &mut DataInit<'_, Self>,
+    ) {
+        match request {
+            wayland_protocols::xdg::shell::server::xdg_wm_base::Request::CreatePositioner {
+                id,
+            } => {
+                data_init.init(id, XdgPositionerState);
+            }
+            wayland_protocols::xdg::shell::server::xdg_wm_base::Request::GetXdgSurface {
+                id,
+                surface,
+            } => {
+                let xdg_surface = data_init.init(
+                    id,
+                    XdgSurfaceState {
+                        wl_surface_id: surface.id().protocol_id(),
+                    },
+                );
+                state.xdg_surfaces_created += 1;
+                state.last_xdg_surface = format!("surface-{}", surface.id().protocol_id());
+                send_xdg_surface_configure(state, &xdg_surface);
+            }
+            wayland_protocols::xdg::shell::server::xdg_wm_base::Request::Pong { serial } => {
+                state.last_xdg_pong = serial;
+            }
+            wayland_protocols::xdg::shell::server::xdg_wm_base::Request::Destroy => {}
+            _ => {
+                let serial = next_serial(state);
+                resource.ping(serial);
+            }
         }
     }
 }
@@ -219,6 +296,100 @@ impl Dispatch<WlSurface, SurfaceState> for CompositorState {
             }
             _ => {}
         }
+    }
+}
+
+impl Dispatch<XdgPositioner, XdgPositionerState> for CompositorState {
+    fn request(
+        _state: &mut Self,
+        _client: &Client,
+        _resource: &XdgPositioner,
+        _request: wayland_protocols::xdg::shell::server::xdg_positioner::Request,
+        _data: &XdgPositionerState,
+        _dhandle: &DisplayHandle,
+        _data_init: &mut DataInit<'_, Self>,
+    ) {
+    }
+}
+
+impl Dispatch<XdgSurface, XdgSurfaceState> for CompositorState {
+    fn request(
+        state: &mut Self,
+        _client: &Client,
+        resource: &XdgSurface,
+        request: wayland_protocols::xdg::shell::server::xdg_surface::Request,
+        data: &XdgSurfaceState,
+        _dhandle: &DisplayHandle,
+        data_init: &mut DataInit<'_, Self>,
+    ) {
+        match request {
+            wayland_protocols::xdg::shell::server::xdg_surface::Request::GetToplevel { id } => {
+                let toplevel = data_init.init(id, XdgToplevelState);
+                send_xdg_toplevel_configure(resource, &toplevel);
+                state.xdg_toplevels_created += 1;
+            }
+            wayland_protocols::xdg::shell::server::xdg_surface::Request::GetPopup {
+                id,
+                parent: _,
+                positioner: _,
+            } => {
+                data_init.init(id, XdgPopupState);
+                state.xdg_popups_created += 1;
+            }
+            wayland_protocols::xdg::shell::server::xdg_surface::Request::SetWindowGeometry {
+                x,
+                y,
+                width,
+                height,
+            } => {
+                state.last_window_geometry = format!(
+                    "surface-{} @ {},{} {}x{}",
+                    data.wl_surface_id, x, y, width, height
+                );
+            }
+            wayland_protocols::xdg::shell::server::xdg_surface::Request::AckConfigure {
+                serial,
+            } => {
+                state.xdg_last_acked_serial = serial;
+                state.xdg_ack_count += 1;
+            }
+            _ => {}
+        }
+    }
+}
+
+impl Dispatch<XdgToplevel, XdgToplevelState> for CompositorState {
+    fn request(
+        state: &mut Self,
+        _client: &Client,
+        _resource: &XdgToplevel,
+        request: wayland_protocols::xdg::shell::server::xdg_toplevel::Request,
+        _data: &XdgToplevelState,
+        _dhandle: &DisplayHandle,
+        _data_init: &mut DataInit<'_, Self>,
+    ) {
+        match request {
+            wayland_protocols::xdg::shell::server::xdg_toplevel::Request::SetTitle { title } => {
+                state.last_toplevel_title = title;
+            }
+            wayland_protocols::xdg::shell::server::xdg_toplevel::Request::SetAppId { app_id } => {
+                state.last_toplevel_app_id = app_id;
+            }
+            _ => {}
+        }
+    }
+}
+
+impl Dispatch<XdgPopup, XdgPopupState> for CompositorState {
+    fn request(
+        _state: &mut Self,
+        _client: &Client,
+        _resource: &XdgPopup,
+        _request: wayland_protocols::xdg::shell::server::xdg_popup::Request,
+        _data: &XdgPopupState,
+        _dhandle: &DisplayHandle,
+        _data_init: &mut DataInit<'_, Self>,
+    ) {
     }
 }
 
@@ -368,4 +539,20 @@ fn remap_pool(file: &File, size: i32) -> anyhow::Result<memmap2::Mmap> {
     let mmap = unsafe { MmapOptions::new().len(len).map(file) }
         .context("failed to mmap shared memory pool")?;
     Ok(mmap)
+}
+
+fn next_serial(state: &mut CompositorState) -> u32 {
+    state.next_serial = state.next_serial.wrapping_add(1).max(1);
+    state.next_serial
+}
+
+fn send_xdg_surface_configure(state: &mut CompositorState, resource: &XdgSurface) {
+    let serial = next_serial(state);
+    resource.configure(serial);
+    state.last_xdg_configure_serial = serial;
+}
+
+fn send_xdg_toplevel_configure(surface: &XdgSurface, toplevel: &XdgToplevel) {
+    toplevel.configure(1280, 720, Vec::new());
+    surface.configure(1);
 }

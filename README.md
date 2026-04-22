@@ -91,6 +91,8 @@ QuailDE now also remembers pending and committed surface buffer state. That is t
 
 QuailDE now maps shared-memory pools and composes committed surfaces into an in-memory software output buffer. There is still no visible display backend yet, but the compositor is now reading real client pixels instead of only tracking metadata.
 
+QuailDE now also advertises `xdg_wm_base` and can initialize `xdg_surface` and `xdg_toplevel` objects, including basic configure and ack bookkeeping. That is the protocol groundwork desktop-style Wayland applications expect before they can behave like real windows.
+
 ## Near-term roadmap
 
 - harden shared-memory buffers and software composition

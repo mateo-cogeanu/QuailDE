@@ -231,6 +231,7 @@ dependencies = [
  "anyhow",
  "clap",
  "memmap2",
+ "wayland-protocols",
  "wayland-server",
 ]
 
@@ -405,6 +406,18 @@ dependencies = [
  "rustix",
  "smallvec",
  "wayland-sys",
+]
+
+[[package]]
+name = "wayland-protocols"
+version = "0.32.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "563a85523cade2429938e790815fd7319062103b9f4a2dc806e9b53b95982d8f"
+dependencies = [
+ "bitflags",
+ "wayland-backend",
+ "wayland-scanner",
+ "wayland-server",
 ]
 
 [[package]]

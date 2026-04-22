@@ -132,15 +132,20 @@ mod platform {
             state: &mut CompositorState,
             framebuffer_path: &Path,
             input_dir: &Path,
+            use_tty_graphics: bool,
         ) -> Result<Self> {
-            let console = match ConsoleModeGuard::enter_graphics_mode() {
-                Ok(console) => Some(console),
-                Err(error) => {
-                    eprintln!(
-                        "warning: could not switch the active tty into graphics mode: {error}"
-                    );
-                    None
+            let console = if use_tty_graphics {
+                match ConsoleModeGuard::enter_graphics_mode() {
+                    Ok(console) => Some(console),
+                    Err(error) => {
+                        eprintln!(
+                            "warning: could not switch the active tty into graphics mode: {error}"
+                        );
+                        None
+                    }
                 }
+            } else {
+                None
             };
             let framebuffer = LinuxFramebuffer::open(framebuffer_path)?;
             let input_devices = discover_input_devices(input_dir)?;
@@ -409,8 +414,9 @@ mod platform {
         state: &mut CompositorState,
         framebuffer_path: &Path,
         input_dir: &Path,
+        use_tty_graphics: bool,
     ) -> Result<LinuxPlatform> {
-        LinuxPlatform::create(state, framebuffer_path, input_dir)
+        LinuxPlatform::create(state, framebuffer_path, input_dir, use_tty_graphics)
     }
 
     pub use LinuxPlatform as Platform;
@@ -436,6 +442,7 @@ mod platform {
         _state: &mut CompositorState,
         _framebuffer_path: &Path,
         _input_dir: &Path,
+        _use_tty_graphics: bool,
     ) -> Result<Platform> {
         bail!("the live raw QuailDE backend only runs on Linux")
     }

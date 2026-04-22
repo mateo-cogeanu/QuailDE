@@ -19,3 +19,4 @@
 - Added a first visible raw Linux backend using `fbdev` and `evdev`, including a rendered desktop background, software cursor, basic focus tracking, and live mouse or keyboard cursor movement.
 - Switched the raw Linux backend to claim the active tty in graphics mode while QuailDE runs, then restore text mode on exit so the framebuffer output can actually stay visible on a Debian console.
 - Hardened tty graphics-mode startup so QuailDE now tries the active Linux VT explicitly and falls back to a warning instead of aborting when a VM does not expose a switchable console device.
+- Made tty graphics-mode opt-in instead of implicit so QuailDE no longer risks trapping the user on a Linux console during routine testing.

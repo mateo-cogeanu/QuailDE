@@ -23,6 +23,7 @@ pub struct RuntimeOptions {
     pub dump_frame: Option<PathBuf>,
     pub framebuffer: PathBuf,
     pub input_dir: PathBuf,
+    pub use_tty_graphics: bool,
     pub once: bool,
 }
 
@@ -82,6 +83,7 @@ pub fn run_runtime(options: RuntimeOptions) -> Result<RuntimeReport> {
             &mut state,
             &options.framebuffer,
             &options.input_dir,
+            options.use_tty_graphics,
         )?)
     } else {
         None

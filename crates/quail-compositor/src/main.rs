@@ -1,9 +1,15 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use quail_compositor::backend::RuntimeBackend;
 use quail_compositor::runtime::{RuntimeOptions, run_runtime};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum ConsoleModeArg {
+    KeepText,
+    Graphics,
+}
 
 #[derive(Debug, Parser)]
 #[command(
@@ -36,6 +42,10 @@ struct Cli {
     #[arg(long, default_value = "/dev/input")]
     input_dir: PathBuf,
 
+    /// Whether QuailDE should switch the active Linux tty into graphics mode.
+    #[arg(long, value_enum, default_value_t = ConsoleModeArg::KeepText)]
+    console_mode: ConsoleModeArg,
+
     /// Run initialization once and exit instead of holding the process open
     #[arg(long)]
     once: bool,
@@ -50,6 +60,7 @@ fn main() -> Result<()> {
         dump_frame: cli.dump_frame,
         framebuffer: cli.framebuffer,
         input_dir: cli.input_dir,
+        use_tty_graphics: cli.console_mode == ConsoleModeArg::Graphics,
         once: cli.once,
     })?;
     let state = report.state;

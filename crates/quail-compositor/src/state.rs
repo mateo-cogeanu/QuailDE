@@ -43,6 +43,13 @@ pub struct CompositorState {
     pub last_window_geometry: String,
     pub last_toplevel_title: String,
     pub last_toplevel_app_id: String,
+    pub seats_bound: usize,
+    pub pointers_created: usize,
+    pub keyboards_created: usize,
+    pub last_seat_name: String,
+    pub pointer_enter_serial: u32,
+    pub keyboard_enter_serial: u32,
+    pub last_input_focus_surface: String,
     pub next_serial: u32,
 }
 
@@ -85,6 +92,13 @@ impl CompositorState {
             last_window_geometry: "none".to_string(),
             last_toplevel_title: "none".to_string(),
             last_toplevel_app_id: "none".to_string(),
+            seats_bound: 0,
+            pointers_created: 0,
+            keyboards_created: 0,
+            last_seat_name: "seat0".to_string(),
+            pointer_enter_serial: 0,
+            keyboard_enter_serial: 0,
+            last_input_focus_surface: "none".to_string(),
             next_serial: 0,
         }
     }
@@ -156,6 +170,16 @@ impl CompositorState {
             format!("  last window geometry: {}", self.last_window_geometry),
             format!("  last toplevel title: {}", self.last_toplevel_title),
             format!("  last toplevel app id: {}", self.last_toplevel_app_id),
+            format!("  seats bound: {}", self.seats_bound),
+            format!("  pointers created: {}", self.pointers_created),
+            format!("  keyboards created: {}", self.keyboards_created),
+            format!("  last seat name: {}", self.last_seat_name),
+            format!("  pointer enter serial: {}", self.pointer_enter_serial),
+            format!("  keyboard enter serial: {}", self.keyboard_enter_serial),
+            format!(
+                "  last input focus surface: {}",
+                self.last_input_focus_surface
+            ),
         ]
     }
 }

@@ -8,8 +8,17 @@ use wayland_protocols::xdg::shell::server::{
     xdg_toplevel::XdgToplevel, xdg_wm_base::XdgWmBase,
 };
 use wayland_server::protocol::{
-    wl_buffer::WlBuffer, wl_callback::WlCallback, wl_compositor::WlCompositor, wl_region::WlRegion,
-    wl_shm::Format as ShmFormat, wl_shm::WlShm, wl_shm_pool::WlShmPool, wl_surface::WlSurface,
+    wl_buffer::WlBuffer,
+    wl_callback::WlCallback,
+    wl_compositor::WlCompositor,
+    wl_keyboard::{KeymapFormat, WlKeyboard},
+    wl_pointer::WlPointer,
+    wl_region::WlRegion,
+    wl_seat::{Capability as SeatCapability, WlSeat},
+    wl_shm::Format as ShmFormat,
+    wl_shm::WlShm,
+    wl_shm_pool::WlShmPool,
+    wl_surface::WlSurface,
 };
 use wayland_server::{
     Client, DataInit, Dispatch, DisplayHandle, GlobalDispatch, New, Resource, WEnum,
@@ -40,6 +49,9 @@ pub struct ShmGlobal;
 pub struct XdgWmBaseGlobal;
 
 #[derive(Debug, Clone, Copy)]
+pub struct SeatGlobal;
+
+#[derive(Debug, Clone, Copy)]
 pub struct XdgPositionerState;
 
 #[derive(Debug, Clone)]
@@ -52,6 +64,12 @@ pub struct XdgToplevelState;
 
 #[derive(Debug, Clone, Copy)]
 pub struct XdgPopupState;
+
+#[derive(Debug, Clone, Copy)]
+pub struct PointerState;
+
+#[derive(Debug, Clone, Copy)]
+pub struct KeyboardState;
 
 #[derive(Debug)]
 pub struct ShmPoolState {
@@ -159,6 +177,26 @@ impl GlobalDispatch<XdgWmBase, XdgWmBaseGlobal> for CompositorState {
     }
 }
 
+impl GlobalDispatch<WlSeat, SeatGlobal> for CompositorState {
+    fn bind(
+        state: &mut Self,
+        _handle: &DisplayHandle,
+        _client: &Client,
+        resource: New<WlSeat>,
+        _global_data: &SeatGlobal,
+        data_init: &mut DataInit<'_, Self>,
+    ) {
+        // A desktop seat needs at least pointer and keyboard capability bits so
+        // clients can wire up focus, cursor, and shortcut handling later on.
+        let seat = data_init.init(resource, SeatGlobal);
+        seat.capabilities(SeatCapability::Pointer | SeatCapability::Keyboard);
+        seat.name("seat0".to_string());
+        state.bound_globals += 1;
+        state.seats_bound += 1;
+        state.last_seat_name = "seat0".to_string();
+    }
+}
+
 impl Dispatch<WlShm, ShmGlobal> for CompositorState {
     fn request(
         state: &mut Self,
@@ -235,6 +273,38 @@ impl Dispatch<XdgWmBase, XdgWmBaseGlobal> for CompositorState {
                 let serial = next_serial(state);
                 resource.ping(serial);
             }
+        }
+    }
+}
+
+impl Dispatch<WlSeat, SeatGlobal> for CompositorState {
+    fn request(
+        state: &mut Self,
+        _client: &Client,
+        _resource: &WlSeat,
+        request: wayland_server::protocol::wl_seat::Request,
+        _data: &SeatGlobal,
+        _dhandle: &DisplayHandle,
+        data_init: &mut DataInit<'_, Self>,
+    ) {
+        match request {
+            wayland_server::protocol::wl_seat::Request::GetPointer { id } => {
+                data_init.init(id, PointerState);
+                state.pointers_created += 1;
+                state.pointer_enter_serial = 0;
+                state.last_input_focus_surface = "pointer-awaiting-focus".to_string();
+            }
+            wayland_server::protocol::wl_seat::Request::GetKeyboard { id } => {
+                let keyboard = data_init.init(id, KeyboardState);
+                keyboard.repeat_info(25, 600);
+                let _ = KeymapFormat::NoKeymap;
+                state.keyboards_created += 1;
+                state.keyboard_enter_serial = 0;
+                state.last_input_focus_surface = "keyboard-awaiting-focus".to_string();
+            }
+            wayland_server::protocol::wl_seat::Request::GetTouch { id: _ } => {}
+            wayland_server::protocol::wl_seat::Request::Release => {}
+            _ => {}
         }
     }
 }
@@ -387,6 +457,32 @@ impl Dispatch<XdgPopup, XdgPopupState> for CompositorState {
         _resource: &XdgPopup,
         _request: wayland_protocols::xdg::shell::server::xdg_popup::Request,
         _data: &XdgPopupState,
+        _dhandle: &DisplayHandle,
+        _data_init: &mut DataInit<'_, Self>,
+    ) {
+    }
+}
+
+impl Dispatch<WlPointer, PointerState> for CompositorState {
+    fn request(
+        _state: &mut Self,
+        _client: &Client,
+        _resource: &WlPointer,
+        _request: wayland_server::protocol::wl_pointer::Request,
+        _data: &PointerState,
+        _dhandle: &DisplayHandle,
+        _data_init: &mut DataInit<'_, Self>,
+    ) {
+    }
+}
+
+impl Dispatch<WlKeyboard, KeyboardState> for CompositorState {
+    fn request(
+        _state: &mut Self,
+        _client: &Client,
+        _resource: &WlKeyboard,
+        _request: wayland_server::protocol::wl_keyboard::Request,
+        _data: &KeyboardState,
         _dhandle: &DisplayHandle,
         _data_init: &mut DataInit<'_, Self>,
     ) {

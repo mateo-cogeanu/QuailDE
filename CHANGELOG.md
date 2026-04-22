@@ -15,3 +15,4 @@
 - Added real shared-memory pool mapping and in-memory software composition so committed surfaces now produce a composed software frame instead of only metadata counters.
 - Added `--dump-frame` support so QuailDE can export its current software-composed output to a PPM image for real-world inspection before a visible display backend exists.
 - Added `xdg_wm_base`, `xdg_surface`, and `xdg_toplevel` handling so QuailDE now exposes the first desktop-window protocol layer expected by modern Wayland apps.
+- Added `wl_seat`, `wl_pointer`, and `wl_keyboard` groundwork so QuailDE now exposes the first input globals and capability metadata a real desktop session needs.

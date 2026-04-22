@@ -93,10 +93,13 @@ QuailDE now maps shared-memory pools and composes committed surfaces into an in-
 
 QuailDE now also advertises `xdg_wm_base` and can initialize `xdg_surface` and `xdg_toplevel` objects, including basic configure and ack bookkeeping. That is the protocol groundwork desktop-style Wayland applications expect before they can behave like real windows.
 
+QuailDE now also advertises `wl_seat` with pointer and keyboard capabilities. The compositor still does not have live focus, cursor motion, or key dispatch yet, but clients can already bind the core input objects a real desktop session depends on.
+
 ## Near-term roadmap
 
 - harden shared-memory buffers and software composition
-- add xdg-shell, seat, and output handling
+- harden seat state into real focus, cursor, and key dispatch
+- add a live output backend and visible redraw path
 - paint the first visible shell surface
 - add panel, launcher, and notifications
 - make QuailDE usable for terminal/browser/editor workflows

@@ -5,11 +5,11 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 use wayland_protocols::xdg::shell::server::xdg_wm_base::XdgWmBase;
-use wayland_server::protocol::{wl_compositor::WlCompositor, wl_shm::WlShm};
+use wayland_server::protocol::{wl_compositor::WlCompositor, wl_seat::WlSeat, wl_shm::WlShm};
 use wayland_server::{Display, ListeningSocket};
 
 use crate::backend::{BackendStatus, RuntimeBackend};
-use crate::protocol::{CompositorGlobal, ShmGlobal, XdgWmBaseGlobal};
+use crate::protocol::{CompositorGlobal, SeatGlobal, ShmGlobal, XdgWmBaseGlobal};
 use crate::software::{compose_scene, write_ppm};
 use crate::state::CompositorState;
 
@@ -50,7 +50,10 @@ pub fn run_runtime(options: RuntimeOptions) -> Result<RuntimeReport> {
     display
         .handle()
         .create_global::<CompositorState, XdgWmBase, _>(7, XdgWmBaseGlobal);
-    state.advertised_globals = 3;
+    display
+        .handle()
+        .create_global::<CompositorState, WlSeat, _>(9, SeatGlobal);
+    state.advertised_globals = 4;
     let socket = ListeningSocket::bind_auto(&options.socket_prefix, 1..=32)
         .context("failed to bind a Wayland listening socket")?;
     let socket_name = socket

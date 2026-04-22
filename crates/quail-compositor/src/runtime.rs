@@ -6,6 +6,7 @@ use anyhow::{Context, Result};
 use wayland_server::protocol::{wl_compositor::WlCompositor, wl_shm::WlShm};
 use wayland_server::{Display, ListeningSocket};
 
+use crate::backend::{BackendStatus, RuntimeBackend};
 use crate::protocol::{CompositorGlobal, ShmGlobal};
 use crate::state::CompositorState;
 
@@ -14,6 +15,7 @@ use crate::state::CompositorState;
 pub struct RuntimeOptions {
     pub session_name: String,
     pub socket_prefix: String,
+    pub backend: RuntimeBackend,
     pub once: bool,
 }
 
@@ -27,10 +29,14 @@ pub struct RuntimeReport {
 /// exits after bootstrap or keeps a tiny dispatch loop alive.
 pub fn run_runtime(options: RuntimeOptions) -> Result<RuntimeReport> {
     let mut state = CompositorState::bootstrap(options.session_name.clone());
-    state.stage = "wayland-bootstrap";
-    state.backend.display_server = "wl_display created";
+    state.backend = BackendStatus::for_backend(options.backend);
+    state.stage = match options.backend {
+        RuntimeBackend::Raw => "wayland-bootstrap",
+        RuntimeBackend::Smithay => "smithay-pivot",
+    };
 
     let mut display = Display::<CompositorState>::new().context("failed to create wl_display")?;
+    state.backend.display_server = "wl_display created";
     display
         .handle()
         .create_global::<CompositorState, WlCompositor, _>(6, CompositorGlobal);
@@ -49,6 +55,12 @@ pub fn run_runtime(options: RuntimeOptions) -> Result<RuntimeReport> {
 
     if options.once {
         return Ok(RuntimeReport { state });
+    }
+
+    if matches!(options.backend, RuntimeBackend::Smithay) {
+        eprintln!(
+            "QuailDE smithay path selected: still using the current bootstrap loop while backend integration lands."
+        );
     }
 
     // This loop is intentionally small: it accepts clients, dispatches pending

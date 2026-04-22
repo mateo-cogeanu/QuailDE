@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 use clap::Parser;
+use quail_compositor::backend::RuntimeBackend;
 use quail_compositor::runtime::{RuntimeOptions, run_runtime};
 
 #[derive(Debug, Parser)]
@@ -20,6 +21,10 @@ struct Cli {
     #[arg(long, default_value = "quailde")]
     socket_prefix: String,
 
+    /// Select the compositor implementation path.
+    #[arg(long, value_enum, default_value_t = RuntimeBackend::Smithay)]
+    backend: RuntimeBackend,
+
     /// Run initialization once and exit instead of holding the process open
     #[arg(long)]
     once: bool,
@@ -30,6 +35,7 @@ fn main() -> Result<()> {
     let report = run_runtime(RuntimeOptions {
         session_name: cli.session,
         socket_prefix: cli.socket_prefix,
+        backend: cli.backend,
         once: cli.once,
     })?;
     let state = report.state;

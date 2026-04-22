@@ -8,6 +8,8 @@ QuailDE starts in Rust because:
 - performance is strong enough for low-end hardware
 - the ecosystem is mature enough to support Linux graphics work
 
+For a daily-ish desktop, QuailDE should target a Smithay-oriented compositor architecture. The current hand-rolled protocol layer is still useful for learning and smoke tests, but it is not the fastest route to windows, input, outputs, and rendering.
+
 ## Current repository shape
 
 ```text
@@ -58,6 +60,12 @@ Responsible for:
 - window management
 - basic rendering and protocol handling
 
+### Implementation strategy
+
+- use the current raw protocol bootstrap as a thin compatibility layer for smoke tests
+- move feature work toward a Smithay-backed compositor path
+- keep QuailDE-specific shell policy, panel behavior, launcher flow, and session logic inside this repo
+
 ### Shell services
 
 Responsible for:
@@ -78,12 +86,12 @@ Responsible for:
 
 ## Suggested implementation order
 
-1. bootstrap binary
-2. config loading
-3. session lifecycle
-4. compositor crate
-5. first panel surface
-6. launcher and notifications
+1. session bootstrap
+2. Smithay-backed compositor runtime
+3. xdg-shell windows plus input/output
+4. first visible shell surface
+5. panel, launcher, and notifications
+6. daily-ish workflow polish
 
 ## Important constraint
 

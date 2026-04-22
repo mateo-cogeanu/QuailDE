@@ -30,6 +30,7 @@ Right now QuailDE contains:
 - TOML-based session configuration
 - a session launcher that can dry-run or supervise child processes
 - a bundled compositor skeleton binary
+- an explicit Smithay-oriented backend path for future usability work
 - architecture and vision docs
 - a project layout that can expand into a real shell
 
@@ -61,12 +62,14 @@ The example config lives at [`quailde.example.toml`](quailde.example.toml). The 
 
 QuailDE now includes a bundled compositor placeholder at [`crates/quail-compositor`](crates/quail-compositor). It is not a real Wayland compositor yet, but it gives the session bootstrap a Quail-owned runtime target and defines the next boundary we should implement.
 
+For a usable desktop, QuailDE is now explicitly pivoting toward a Smithay-oriented architecture rather than continuing to grow only through hand-rolled protocol code. The current `--backend smithay` path still reuses the bootstrap loop underneath, but it sets the direction for the next real implementation steps.
+
 The compositor crate now has explicit modules for backend, output, shell-surface, runtime, and overall state so we can replace placeholders with real Wayland pieces incrementally instead of rewriting one large file later.
 
 The current compositor bootstrap can also create a real Wayland display socket. On Linux with `XDG_RUNTIME_DIR` set, try:
 
 ```bash
-cargo run -p quail-compositor -- --once --session QuailDE
+cargo run -p quail-compositor -- --once --session QuailDE --backend smithay
 ```
 
 That command initializes `wl_display`, binds a `quailde-*` socket, reports the socket name, and exits.
@@ -79,10 +82,10 @@ QuailDE now also remembers pending and committed surface buffer state. That is t
 
 ## Near-term roadmap
 
-- create a real session process and lifecycle manager
-- add configuration loading from XDG paths
-- introduce a Wayland compositor crate
-- add shell services for notifications, launcher, and panel state
-- prototype the first visible shell surface
+- land the first Smithay-backed compositor runtime
+- add xdg-shell, seat, and output handling
+- paint the first visible shell surface
+- add panel, launcher, and notifications
+- make QuailDE usable for terminal/browser/editor workflows
 
 See [`docs/vision.md`](docs/vision.md) and [`docs/architecture.md`](docs/architecture.md).

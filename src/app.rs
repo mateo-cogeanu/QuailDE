@@ -72,11 +72,11 @@ impl App {
 
     pub fn roadmap(&self) -> Result<()> {
         println!("QuailDE roadmap");
-        println!("  1. Config and session bootstrap");
-        println!("  2. Compositor skeleton");
-        println!("  3. Panel surface");
-        println!("  4. Launcher and notifications");
-        println!("  5. Lock screen and settings");
+        println!("  1. Smithay-oriented compositor backend");
+        println!("  2. xdg-shell windows and input");
+        println!("  3. First visible shell surface");
+        println!("  4. Panel, launcher, and notifications");
+        println!("  5. Daily-ish workflow polish");
         Ok(())
     }
 }

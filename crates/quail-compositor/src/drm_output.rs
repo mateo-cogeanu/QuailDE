@@ -111,9 +111,12 @@ impl DrmOutput {
             let mut map = card
                 .map_dumb_buffer(&mut dumb_buffer)
                 .context("failed to map DRM dumb buffer")?;
-            for byte in map.as_mut() {
-                *byte = 0;
-            }
+            paint_test_pattern(
+                map.as_mut(),
+                usize::try_from(width).unwrap_or(0),
+                usize::try_from(height).unwrap_or(0),
+                usize::try_from(dumb_buffer.pitch()).unwrap_or(0),
+            );
         }
 
         card.set_crtc(
@@ -176,6 +179,19 @@ impl DrmOutput {
             }
         }
 
+        // Legacy modesetting is a blunt tool, but explicitly reasserting the
+        // CRTC here makes the first QuailDE scanout more reliable on simple
+        // VM GPUs that otherwise keep showing a stale black buffer.
+        self.card
+            .set_crtc(
+                self.crtc,
+                Some(self.framebuffer),
+                (0, 0),
+                &[self.connector.handle()],
+                Some(self.mode),
+            )
+            .context("failed to refresh DRM CRTC after presenting a frame")?;
+
         Ok(())
     }
 }
@@ -212,5 +228,35 @@ impl DrmOutput {
 
     pub fn present(&mut self, _frame: &crate::software::SoftwareFrame) -> anyhow::Result<()> {
         anyhow::bail!("the DRM/KMS output backend only runs on Linux")
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn paint_test_pattern(bytes: &mut [u8], width: usize, height: usize, pitch: usize) {
+    for y in 0..height {
+        for x in 0..width {
+            let dst = y.saturating_mul(pitch).saturating_add(x.saturating_mul(4));
+            if dst.saturating_add(4) > bytes.len() {
+                continue;
+            }
+
+            let pixel = if y < height / 3 {
+                if x % 32 < 16 {
+                    0xFFFF_00FF
+                } else {
+                    0xFF00_FFFF
+                }
+            } else if y < (height * 2) / 3 {
+                if x % 64 < 32 {
+                    0xFFFF_E066
+                } else {
+                    0xFF66_D9EF
+                }
+            } else {
+                0xFF2F_3E56
+            };
+
+            bytes[dst..dst + 4].copy_from_slice(&pixel.to_le_bytes());
+        }
     }
 }

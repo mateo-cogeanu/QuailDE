@@ -24,3 +24,4 @@
 - Fixed the DRM/KMS output module to import the dumb-buffer trait methods explicitly so Linux builds can call `size()` and `pitch()` correctly.
 - Reworked the software shell frame into a clearly visible desktop mockup with a brighter wallpaper, top bar, dock, desktop icons, and placeholder windows so QuailDE now looks like a standard DE before real apps arrive.
 - Forced the Linux output path to present one full shell frame immediately at startup so QuailDE does not come up on an all-black scanout before the main loop begins.
+- Fixed the startup frame presentation path to bind the Linux output backend mutably so the immediate first-frame render compiles on Linux too.

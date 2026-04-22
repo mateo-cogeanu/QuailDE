@@ -154,7 +154,7 @@ mod platform {
             } else {
                 None
             };
-            let output = match DrmOutput::open(drm_device_path, state) {
+            let mut output = match DrmOutput::open(drm_device_path, state) {
                 Ok(output) => OutputBackend::Drm(output),
                 Err(drm_error) => {
                     eprintln!(

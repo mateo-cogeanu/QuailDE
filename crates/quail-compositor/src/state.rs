@@ -56,6 +56,10 @@ pub struct CompositorState {
     pub cursor_x: i32,
     pub cursor_y: i32,
     pub cursor_visible: bool,
+    pub focused_surface_id: Option<u32>,
+    pub dragging_surface_id: Option<u32>,
+    pub drag_offset_x: i32,
+    pub drag_offset_y: i32,
     pub presented_frames: usize,
     pub quit_requested: bool,
     pub next_serial: u32,
@@ -113,6 +117,10 @@ impl CompositorState {
             cursor_x: 96,
             cursor_y: 96,
             cursor_visible: true,
+            focused_surface_id: None,
+            dragging_surface_id: None,
+            drag_offset_x: 0,
+            drag_offset_y: 0,
             presented_frames: 0,
             quit_requested: false,
             next_serial: 0,
@@ -204,6 +212,18 @@ impl CompositorState {
             ),
             format!("  cursor position: {},{}", self.cursor_x, self.cursor_y),
             format!("  cursor visible: {}", self.cursor_visible),
+            format!(
+                "  focused surface: {}",
+                self.focused_surface_id
+                    .map(|id| format!("surface-{id}"))
+                    .unwrap_or_else(|| "none".to_string())
+            ),
+            format!(
+                "  dragging surface: {}",
+                self.dragging_surface_id
+                    .map(|id| format!("surface-{id}"))
+                    .unwrap_or_else(|| "none".to_string())
+            ),
             format!("  presented frames: {}", self.presented_frames),
         ]
     }
@@ -221,20 +241,95 @@ impl CompositorState {
     pub fn update_input_focus(&mut self) {
         let cursor_x = self.cursor_x;
         let cursor_y = self.cursor_y;
-        let focused_surface = self.scene.surfaces.iter().rev().find_map(|(id, surface)| {
-            let buffer = surface.committed_buffer.as_ref()?;
-            let width = buffer.width.max(0);
-            let height = buffer.height.max(0);
-            let inside_x = cursor_x >= surface.x && cursor_x < surface.x.saturating_add(width);
-            let inside_y = cursor_y >= surface.y && cursor_y < surface.y.saturating_add(height);
-            if inside_x && inside_y {
-                Some(format!("surface-{id}"))
-            } else {
-                None
-            }
-        });
+        self.last_input_focus_surface = self
+            .top_surface_under_cursor(cursor_x, cursor_y)
+            .map(|id| format!("surface-{id}"))
+            .unwrap_or_else(|| "desktop-root".to_string());
+    }
 
-        self.last_input_focus_surface =
-            focused_surface.unwrap_or_else(|| "desktop-root".to_string());
+    /// top_surface_under_cursor returns the visible toplevel surface at the
+    /// given location, preferring the focused window when overlaps occur.
+    pub fn top_surface_under_cursor(&self, cursor_x: i32, cursor_y: i32) -> Option<u32> {
+        let mut candidates = self
+            .scene
+            .surfaces
+            .iter()
+            .filter_map(|(id, surface)| {
+                let buffer = surface.committed_buffer.as_ref()?;
+                let width = buffer.width.max(0);
+                let height = buffer.height.max(0);
+                let left = surface.x - 6;
+                let top = surface.y - 34;
+                let right = surface.x.saturating_add(width).saturating_add(6);
+                let bottom = surface.y.saturating_add(height).saturating_add(6);
+                let inside_x = cursor_x >= left && cursor_x < right;
+                let inside_y = cursor_y >= top && cursor_y < bottom;
+                if inside_x && inside_y && surface.is_toplevel {
+                    Some(*id)
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+
+        candidates.sort_unstable();
+        if let Some(focused) = self.focused_surface_id
+            && candidates.contains(&focused)
+        {
+            return Some(focused);
+        }
+        candidates.pop()
+    }
+
+    /// begin_window_drag focuses the hit window and starts dragging when the
+    /// cursor lands in the server-side titlebar area of a managed toplevel.
+    pub fn begin_window_drag(&mut self) {
+        let Some(surface_id) = self.top_surface_under_cursor(self.cursor_x, self.cursor_y) else {
+            self.focused_surface_id = None;
+            self.dragging_surface_id = None;
+            return;
+        };
+        self.focused_surface_id = Some(surface_id);
+        if let Some(surface) = self.scene.surfaces.get(&surface_id)
+            && self.cursor_y < surface.y
+        {
+            self.dragging_surface_id = Some(surface_id);
+            self.drag_offset_x = self.cursor_x - surface.x;
+            self.drag_offset_y = self.cursor_y - surface.y;
+        }
+    }
+
+    /// update_drag moves the grabbed window with the software cursor.
+    pub fn update_drag(&mut self) {
+        let Some(surface_id) = self.dragging_surface_id else {
+            return;
+        };
+        let output_width = self.composed_width;
+        let output_height = self.composed_height;
+        if let Some(surface) = self.scene.surfaces.get_mut(&surface_id) {
+            let buffer = match surface.committed_buffer.as_ref() {
+                Some(buffer) => buffer,
+                None => return,
+            };
+            let max_x = output_width
+                .saturating_sub(buffer.width)
+                .saturating_sub(12)
+                .max(0);
+            let max_y = output_height
+                .saturating_sub(buffer.height)
+                .saturating_sub(12)
+                .max(36);
+            surface.x = (self.cursor_x - self.drag_offset_x).clamp(6, max_x);
+            surface.y = (self.cursor_y - self.drag_offset_y).clamp(34, max_y);
+            self.last_window_geometry = format!(
+                "surface-{} @ {},{} {}x{}",
+                surface_id, surface.x, surface.y, buffer.width, buffer.height
+            );
+        }
+    }
+
+    /// end_pointer_press releases any active drag grab.
+    pub fn end_pointer_press(&mut self) {
+        self.dragging_surface_id = None;
     }
 }

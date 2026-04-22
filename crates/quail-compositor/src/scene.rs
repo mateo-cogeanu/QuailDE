@@ -74,6 +74,9 @@ pub struct SceneSurface {
     pub object_id: u32,
     pub x: i32,
     pub y: i32,
+    pub window_title: String,
+    pub app_id: String,
+    pub is_toplevel: bool,
     pub committed_buffer: Option<BufferSnapshot>,
     pub commit_count: usize,
 }

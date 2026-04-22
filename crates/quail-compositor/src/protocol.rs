@@ -59,8 +59,10 @@ pub struct XdgSurfaceState {
     pub wl_surface_id: u32,
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct XdgToplevelState;
+#[derive(Debug, Clone)]
+pub struct XdgToplevelState {
+    pub wl_surface_id: u32,
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct XdgPopupState;
@@ -398,9 +400,26 @@ impl Dispatch<XdgSurface, XdgSurfaceState> for CompositorState {
     ) {
         match request {
             wayland_protocols::xdg::shell::server::xdg_surface::Request::GetToplevel { id } => {
-                let toplevel = data_init.init(id, XdgToplevelState);
+                let toplevel = data_init.init(
+                    id,
+                    XdgToplevelState {
+                        wl_surface_id: data.wl_surface_id,
+                    },
+                );
                 send_xdg_toplevel_configure(resource, &toplevel);
                 state.xdg_toplevels_created += 1;
+                let scene_surface =
+                    state
+                        .scene
+                        .surfaces
+                        .entry(data.wl_surface_id)
+                        .or_insert(SceneSurface {
+                            object_id: data.wl_surface_id,
+                            x: 96,
+                            y: 132,
+                            ..SceneSurface::default()
+                        });
+                scene_surface.is_toplevel = true;
             }
             wayland_protocols::xdg::shell::server::xdg_surface::Request::GetPopup {
                 id,
@@ -445,9 +464,15 @@ impl Dispatch<XdgToplevel, XdgToplevelState> for CompositorState {
         match request {
             wayland_protocols::xdg::shell::server::xdg_toplevel::Request::SetTitle { title } => {
                 state.last_toplevel_title = title;
+                if let Some(scene_surface) = state.scene.surfaces.get_mut(&_data.wl_surface_id) {
+                    scene_surface.window_title = state.last_toplevel_title.clone();
+                }
             }
             wayland_protocols::xdg::shell::server::xdg_toplevel::Request::SetAppId { app_id } => {
                 state.last_toplevel_app_id = app_id;
+                if let Some(scene_surface) = state.scene.surfaces.get_mut(&_data.wl_surface_id) {
+                    scene_surface.app_id = state.last_toplevel_app_id.clone();
+                }
             }
             _ => {}
         }
@@ -628,6 +653,9 @@ fn update_scene_surface(state: &mut CompositorState, object_id: u32, slots: &Sur
         });
     scene_surface.committed_buffer = slots.committed_buffer.clone();
     scene_surface.commit_count = slots.commit_count;
+    if scene_surface.is_toplevel && scene_surface.window_title.is_empty() {
+        scene_surface.window_title = format!("Quail Window {}", object_id);
+    }
 }
 
 fn map_shm_pool(fd: std::os::fd::OwnedFd, size: i32) -> anyhow::Result<ShmPoolBacking> {

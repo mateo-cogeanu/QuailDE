@@ -22,8 +22,11 @@ mod platform {
 
     const EV_KEY: u16 = 0x01;
     const EV_REL: u16 = 0x02;
+    const EV_ABS: u16 = 0x03;
     const REL_X: u16 = 0x00;
     const REL_Y: u16 = 0x01;
+    const ABS_X: u16 = 0x00;
+    const ABS_Y: u16 = 0x01;
     const KEY_ESC: u16 = 1;
     const KEY_UP: u16 = 103;
     const KEY_LEFT: u16 = 105;
@@ -430,8 +433,26 @@ mod platform {
         match (event.type_, event.code, event.value) {
             (EV_REL, REL_X, delta) => state.cursor_x = state.cursor_x.saturating_add(delta),
             (EV_REL, REL_Y, delta) => state.cursor_y = state.cursor_y.saturating_add(delta),
-            (EV_KEY, BTN_LEFT, 1) => state.pointer_buttons_pressed = 1,
-            (EV_KEY, BTN_LEFT, 0) => state.pointer_buttons_pressed = 0,
+            (EV_ABS, ABS_X, value) => {
+                state.cursor_x = value
+                    .saturating_mul(state.composed_width.max(1))
+                    .checked_div(32_767)
+                    .unwrap_or(state.cursor_x);
+            }
+            (EV_ABS, ABS_Y, value) => {
+                state.cursor_y = value
+                    .saturating_mul(state.composed_height.max(1))
+                    .checked_div(32_767)
+                    .unwrap_or(state.cursor_y);
+            }
+            (EV_KEY, BTN_LEFT, 1) => {
+                state.pointer_buttons_pressed = 1;
+                state.begin_window_drag();
+            }
+            (EV_KEY, BTN_LEFT, 0) => {
+                state.pointer_buttons_pressed = 0;
+                state.end_pointer_press();
+            }
             (EV_KEY, KEY_LEFT, 1) => state.cursor_x = state.cursor_x.saturating_sub(24),
             (EV_KEY, KEY_RIGHT, 1) => state.cursor_x = state.cursor_x.saturating_add(24),
             (EV_KEY, KEY_UP, 1) => state.cursor_y = state.cursor_y.saturating_sub(24),
@@ -439,6 +460,9 @@ mod platform {
             (EV_KEY, KEY_ESC, 1) => state.quit_requested = true,
             _ => {}
         }
+        state.clamp_cursor();
+        state.update_drag();
+        state.update_input_focus();
     }
 
     pub fn create_linux_platform(

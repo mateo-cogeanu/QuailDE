@@ -27,3 +27,4 @@
 - Fixed the startup frame presentation path to bind the Linux output backend mutably so the immediate first-frame render compiles on Linux too.
 - Hardened the DRM/KMS scanout path with a direct startup test pattern and an explicit CRTC refresh on frame present so VM GPUs are less likely to stay stuck on a stale black buffer.
 - Fixed two Linux-only compile issues in the DRM test-pattern path by typing the startup pixels explicitly and computing the dumb-buffer pitch before taking the mutable map borrow.
+- Removed fake placeholder windows and turned the raw compositor into a basic real window manager for `xdg_toplevel` surfaces, with focus tracking, server-side decorations, and drag-to-move behavior driven by the mouse.

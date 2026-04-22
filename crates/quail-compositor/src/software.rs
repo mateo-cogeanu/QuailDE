@@ -31,19 +31,25 @@ pub fn compose_scene(state: &mut CompositorState) -> SoftwareFrame {
     paint_dock(&mut pixels, width, height);
     paint_desktop_icons(&mut pixels, width, height);
 
-    if state
-        .scene
-        .surfaces
-        .values()
-        .all(|surface| surface.committed_buffer.is_none())
-    {
-        // A desktop should still feel alive before the first client connects,
-        // so QuailDE paints a small shell mockup instead of a bare wallpaper.
-        paint_placeholder_windows(&mut pixels, width, height);
-    }
+    let mut ordered_surfaces = state.scene.surfaces.values().collect::<Vec<_>>();
+    ordered_surfaces.sort_by_key(|surface| {
+        let focused_rank = if state.focused_surface_id == Some(surface.object_id) {
+            1
+        } else {
+            0
+        };
+        (focused_rank, surface.object_id)
+    });
 
-    for surface in state.scene.surfaces.values() {
+    for surface in ordered_surfaces {
         if let Some(buffer) = &surface.committed_buffer {
+            paint_window_frame(
+                &mut pixels,
+                width,
+                height,
+                surface,
+                state.focused_surface_id == Some(surface.object_id),
+            );
             if paint_surface(&mut pixels, width, height, surface, buffer) {
                 painted_surfaces += 1;
             }
@@ -293,79 +299,6 @@ fn paint_desktop_icons(frame: &mut [u32], width: usize, height: usize) {
     }
 }
 
-fn paint_placeholder_windows(frame: &mut [u32], width: usize, height: usize) {
-    let main_width = width.saturating_mul(52) / 100;
-    let main_height = height.saturating_mul(44) / 100;
-    let main_x = width.saturating_mul(22) / 100;
-    let main_y = height.saturating_mul(16) / 100;
-
-    paint_window(
-        frame,
-        width,
-        height,
-        main_x,
-        main_y,
-        main_width,
-        main_height,
-        0xFFF5F7FB,
-        0xFF2A3140,
-    );
-    fill_rect(
-        frame,
-        width,
-        height,
-        main_x + 24,
-        main_y + 64,
-        main_width.saturating_sub(48),
-        18,
-        0xFF9EB4CC,
-    );
-    fill_rect(
-        frame,
-        width,
-        height,
-        main_x + 24,
-        main_y + 98,
-        main_width.saturating_sub(96),
-        14,
-        0xFFC2D3E8,
-    );
-    for row in 0..3 {
-        fill_rect(
-            frame,
-            width,
-            height,
-            main_x + 24,
-            main_y + 146 + row * 54,
-            main_width.saturating_sub(48),
-            34,
-            if row == 0 { 0xFFE7EEF7 } else { 0xFFF0F4F9 },
-        );
-    }
-
-    paint_window(
-        frame,
-        width,
-        height,
-        width.saturating_mul(58) / 100,
-        height.saturating_mul(24) / 100,
-        width.saturating_mul(22) / 100,
-        height.saturating_mul(28) / 100,
-        0xFFFBFCFE,
-        0xFF31415B,
-    );
-    fill_rect(
-        frame,
-        width,
-        height,
-        width.saturating_mul(60) / 100,
-        height.saturating_mul(34) / 100,
-        width.saturating_mul(12) / 100,
-        76,
-        0xFFE9EFF6,
-    );
-}
-
 fn paint_cursor(frame: &mut [u32], width: usize, height: usize, cursor_x: i32, cursor_y: i32) {
     let cursor_pattern = [
         "X...........",
@@ -408,17 +341,26 @@ fn paint_cursor(frame: &mut [u32], width: usize, height: usize, cursor_x: i32, c
     }
 }
 
-fn paint_window(
+fn paint_window_frame(
     frame: &mut [u32],
     width: usize,
     height: usize,
-    x: usize,
-    y: usize,
-    window_width: usize,
-    window_height: usize,
-    body_color: u32,
-    title_color: u32,
+    surface: &SceneSurface,
+    focused: bool,
 ) {
+    let Some(buffer) = surface.committed_buffer.as_ref() else {
+        return;
+    };
+    let x = surface.x.saturating_sub(6).max(0) as usize;
+    let y = surface.y.saturating_sub(34).max(0) as usize;
+    let window_width = usize::try_from(buffer.width.max(0))
+        .unwrap_or(0)
+        .saturating_add(12);
+    let window_height = usize::try_from(buffer.height.max(0))
+        .unwrap_or(0)
+        .saturating_add(40);
+    let body_color = if focused { 0xFFF5F7FB } else { 0xFFE6EBF1 };
+    let title_color = if focused { 0xFF29538A } else { 0xFF46566E };
     fill_rect(
         frame,
         width,
@@ -452,6 +394,17 @@ fn paint_window(
     fill_rect(frame, width, height, x + 16, y + 14, 12, 12, 0xFFFF6B6B);
     fill_rect(frame, width, height, x + 34, y + 14, 12, 12, 0xFFF2C14E);
     fill_rect(frame, width, height, x + 52, y + 14, 12, 12, 0xFF67D5B5);
+    let title_width = surface.window_title.len().min(24).saturating_mul(7).max(42);
+    fill_rect(
+        frame,
+        width,
+        height,
+        x + 84,
+        y + 14,
+        title_width,
+        10,
+        if focused { 0xFFDDEBFF } else { 0xFFD2DCE8 },
+    );
 }
 
 fn fill_rect(

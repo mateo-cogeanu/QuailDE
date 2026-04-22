@@ -1,4 +1,5 @@
 pub mod backend;
+pub mod drm_output;
 pub mod linux;
 pub mod output;
 pub mod protocol;

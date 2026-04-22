@@ -21,6 +21,7 @@ pub struct RuntimeOptions {
     pub socket_prefix: String,
     pub backend: RuntimeBackend,
     pub dump_frame: Option<PathBuf>,
+    pub drm_device: PathBuf,
     pub framebuffer: PathBuf,
     pub input_dir: PathBuf,
     pub use_tty_graphics: bool,
@@ -81,6 +82,7 @@ pub fn run_runtime(options: RuntimeOptions) -> Result<RuntimeReport> {
     let mut linux_platform = if options.backend == RuntimeBackend::Raw {
         Some(create_linux_platform(
             &mut state,
+            &options.drm_device,
             &options.framebuffer,
             &options.input_dir,
             options.use_tty_graphics,

@@ -38,6 +38,10 @@ struct Cli {
     #[arg(long, default_value = "/dev/fb0")]
     framebuffer: PathBuf,
 
+    /// Linux DRM device used for the preferred live raw output path.
+    #[arg(long, default_value = "/dev/dri/card0")]
+    drm_device: PathBuf,
+
     /// Linux input directory used to discover evdev devices.
     #[arg(long, default_value = "/dev/input")]
     input_dir: PathBuf,
@@ -58,6 +62,7 @@ fn main() -> Result<()> {
         socket_prefix: cli.socket_prefix,
         backend: cli.backend,
         dump_frame: cli.dump_frame,
+        drm_device: cli.drm_device,
         framebuffer: cli.framebuffer,
         input_dir: cli.input_dir,
         use_tty_graphics: cli.console_mode == ConsoleModeArg::Graphics,

@@ -93,31 +93,31 @@ QuailDE now maps shared-memory pools and composes committed surfaces into an in-
 
 QuailDE now also advertises `xdg_wm_base` and can initialize `xdg_surface` and `xdg_toplevel` objects, including basic configure and ack bookkeeping. That is the protocol groundwork desktop-style Wayland applications expect before they can behave like real windows.
 
-QuailDE now also advertises `wl_seat` with pointer and keyboard capabilities. The compositor also has a first raw Linux live path: it can draw its software-composed desktop frame to `/dev/fb0` and read mouse or keyboard events from `/dev/input/event*`.
+QuailDE now also advertises `wl_seat` with pointer and keyboard capabilities. The compositor also has a first raw Linux live path: it prefers DRM/KMS on `/dev/dri/card0`, falls back to `/dev/fb0` when DRM setup fails, and reads mouse or keyboard events from `/dev/input/event*`.
 
 On a Linux VM with no desktop environment, you can now try the first visible QuailDE session from a text console:
 
 ```bash
 cargo build --workspace
 sudo mkdir -p /tmp/quailde-runtime
-sudo XDG_RUNTIME_DIR=/tmp/quailde-runtime ./target/debug/quail-compositor --session QuailDE --backend raw --framebuffer /dev/fb0 --input-dir /dev/input
+sudo XDG_RUNTIME_DIR=/tmp/quailde-runtime ./target/debug/quail-compositor --session QuailDE --backend raw --drm-device /dev/dri/card0 --framebuffer /dev/fb0 --input-dir /dev/input
 ```
 
 Notes:
 
-- this raw live path currently targets Linux `fbdev` plus `evdev`
+- this raw live path now prefers Linux DRM/KMS plus `evdev`, with `fbdev` kept as a fallback
 - QuailDE now keeps text mode by default so testing is safer
-- only use `--console-mode graphics` from a real Linux virtual console when you explicitly want QuailDE to take over the tty
+- only use `--console-mode graphics` from a real Linux virtual console when you explicitly want the fallback `fbdev` path to take over the tty
 - press `Esc` to exit
 - arrow keys also move the software cursor if mouse input is unavailable
-- if you see a warning about graphics mode, the VM likely is not exposing a switchable virtual console; QuailDE may still run, but the text tty can keep painting over it
-- some VMs or kernels may not expose `/dev/fb0`; this is the first visible backend, not the final output architecture
+- if QuailDE logs a DRM warning and falls back to `fbdev`, the VM or permissions likely blocked modesetting on `/dev/dri/card0`
+- some VMs expose `/dev/dri/card0` but require root or an active virtual console for modesetting
 
 ## Near-term roadmap
 
 - harden shared-memory buffers and software composition
 - harden raw Linux focus and pointer behavior beyond the desktop root
-- add direct-output paths beyond the initial fbdev preview
+- replace legacy modeset startup with a more complete DRM/KMS path
 - paint the first visible shell surface
 - add panel, launcher, and notifications
 - make QuailDE usable for terminal/browser/editor workflows

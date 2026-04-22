@@ -10,6 +10,7 @@ mod platform {
     use anyhow::{Context, Result, bail};
     use memmap2::MmapMut;
 
+    use crate::drm_output::DrmOutput;
     use crate::software::{SoftwareFrame, compose_scene};
     use crate::state::CompositorState;
 
@@ -105,8 +106,13 @@ mod platform {
     /// fbdev for pixels and evdev for mouse/keyboard input.
     pub struct LinuxPlatform {
         console: Option<ConsoleModeGuard>,
-        framebuffer: LinuxFramebuffer,
+        output: OutputBackend,
         input_devices: Vec<InputDevice>,
+    }
+
+    enum OutputBackend {
+        Drm(DrmOutput),
+        Framebuffer(LinuxFramebuffer),
     }
 
     struct ConsoleModeGuard {
@@ -130,6 +136,7 @@ mod platform {
     impl LinuxPlatform {
         pub fn create(
             state: &mut CompositorState,
+            drm_device_path: &Path,
             framebuffer_path: &Path,
             input_dir: &Path,
             use_tty_graphics: bool,
@@ -147,31 +154,39 @@ mod platform {
             } else {
                 None
             };
-            let framebuffer = LinuxFramebuffer::open(framebuffer_path)?;
-            let input_devices = discover_input_devices(input_dir)?;
-
-            state.outputs.detected_outputs = 1;
-            state.outputs.layout = format!(
-                "linux fbdev {}x{} @ {}bpp",
-                framebuffer.width, framebuffer.height, framebuffer.bits_per_pixel
-            );
-            state.composed_width = framebuffer.width as i32;
-            state.composed_height = framebuffer.height as i32;
-            state.cursor_x = state.composed_width / 2;
-            state.cursor_y = state.composed_height / 2;
-            state.clamp_cursor();
-            state.update_input_focus();
-            state.stage = "linux-live";
-            state.backend.renderer = "software composition to fbdev";
-            state.backend.input = if console.is_some() {
-                "evdev pointer and keyboard"
-            } else {
-                "evdev pointer and keyboard (tty graphics mode unavailable)"
+            let output = match DrmOutput::open(drm_device_path, state) {
+                Ok(output) => OutputBackend::Drm(output),
+                Err(drm_error) => {
+                    eprintln!(
+                        "warning: DRM/KMS startup failed, falling back to fbdev: {drm_error}"
+                    );
+                    let framebuffer = LinuxFramebuffer::open(framebuffer_path)?;
+                    state.outputs.detected_outputs = 1;
+                    state.outputs.layout = format!(
+                        "linux fbdev {}x{} @ {}bpp",
+                        framebuffer.width, framebuffer.height, framebuffer.bits_per_pixel
+                    );
+                    state.composed_width = framebuffer.width as i32;
+                    state.composed_height = framebuffer.height as i32;
+                    state.cursor_x = state.composed_width / 2;
+                    state.cursor_y = state.composed_height / 2;
+                    state.clamp_cursor();
+                    state.update_input_focus();
+                    state.stage = "linux-fbdev-live";
+                    state.backend.renderer = "software composition to fbdev";
+                    state.backend.input = if console.is_some() {
+                        "evdev pointer and keyboard"
+                    } else {
+                        "evdev pointer and keyboard (tty graphics mode unavailable)"
+                    };
+                    OutputBackend::Framebuffer(framebuffer)
+                }
             };
+            let input_devices = discover_input_devices(input_dir)?;
 
             Ok(Self {
                 console,
-                framebuffer,
+                output,
                 input_devices,
             })
         }
@@ -182,7 +197,10 @@ mod platform {
             state.update_input_focus();
 
             let frame = compose_scene(state);
-            self.framebuffer.present(&frame)?;
+            match &mut self.output {
+                OutputBackend::Drm(output) => output.present(&frame)?,
+                OutputBackend::Framebuffer(framebuffer) => framebuffer.present(&frame)?,
+            }
             state.last_frame_checksum = frame.checksum;
             state.last_frame_painted_surfaces = frame.painted_surfaces;
             state.presented_frames += 1;
@@ -412,11 +430,18 @@ mod platform {
 
     pub fn create_linux_platform(
         state: &mut CompositorState,
+        drm_device_path: &Path,
         framebuffer_path: &Path,
         input_dir: &Path,
         use_tty_graphics: bool,
     ) -> Result<LinuxPlatform> {
-        LinuxPlatform::create(state, framebuffer_path, input_dir, use_tty_graphics)
+        LinuxPlatform::create(
+            state,
+            drm_device_path,
+            framebuffer_path,
+            input_dir,
+            use_tty_graphics,
+        )
     }
 
     pub use LinuxPlatform as Platform;
@@ -440,6 +465,7 @@ mod platform {
 
     pub fn create_linux_platform(
         _state: &mut CompositorState,
+        _drm_device_path: &Path,
         _framebuffer_path: &Path,
         _input_dir: &Path,
         _use_tty_graphics: bool,

@@ -64,7 +64,7 @@ Responsible for:
 
 - use the current raw protocol bootstrap as the primary compositor path
 - grow that path into a full compositor through Wayland globals, shared-memory buffers, software composition, outputs, input, and xdg-shell
-- use narrow Linux primitives like `fbdev` and `evdev` for early visible bring-up before QuailDE grows a stronger direct-output path
+- use narrow Linux primitives like DRM/KMS, `evdev`, and only secondarily `fbdev` for early visible bring-up before QuailDE grows a stronger direct-output path
 - keep QuailDE-specific shell policy, panel behavior, launcher flow, and session logic inside this repo
 
 ### Shell services

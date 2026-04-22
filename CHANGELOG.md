@@ -26,3 +26,4 @@
 - Forced the Linux output path to present one full shell frame immediately at startup so QuailDE does not come up on an all-black scanout before the main loop begins.
 - Fixed the startup frame presentation path to bind the Linux output backend mutably so the immediate first-frame render compiles on Linux too.
 - Hardened the DRM/KMS scanout path with a direct startup test pattern and an explicit CRTC refresh on frame present so VM GPUs are less likely to stay stuck on a stale black buffer.
+- Fixed two Linux-only compile issues in the DRM test-pattern path by typing the startup pixels explicitly and computing the dumb-buffer pitch before taking the mutable map borrow.

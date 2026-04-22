@@ -106,6 +106,7 @@ impl DrmOutput {
         let framebuffer = card
             .add_framebuffer(&dumb_buffer, 24, 32)
             .context("failed to create DRM framebuffer object")?;
+        let startup_pitch = usize::try_from(dumb_buffer.pitch()).unwrap_or(0);
 
         {
             let mut map = card
@@ -115,7 +116,7 @@ impl DrmOutput {
                 map.as_mut(),
                 usize::try_from(width).unwrap_or(0),
                 usize::try_from(height).unwrap_or(0),
-                usize::try_from(dumb_buffer.pitch()).unwrap_or(0),
+                startup_pitch,
             );
         }
 
@@ -240,7 +241,7 @@ fn paint_test_pattern(bytes: &mut [u8], width: usize, height: usize, pitch: usiz
                 continue;
             }
 
-            let pixel = if y < height / 3 {
+            let pixel: u32 = if y < height / 3 {
                 if x % 32 < 16 {
                     0xFFFF_00FF
                 } else {

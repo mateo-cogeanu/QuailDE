@@ -104,7 +104,7 @@ mod platform {
     /// LinuxPlatform owns the first visible raw Linux backend for QuailDE:
     /// fbdev for pixels and evdev for mouse/keyboard input.
     pub struct LinuxPlatform {
-        console: ConsoleModeGuard,
+        console: Option<ConsoleModeGuard>,
         framebuffer: LinuxFramebuffer,
         input_devices: Vec<InputDevice>,
     }
@@ -133,7 +133,15 @@ mod platform {
             framebuffer_path: &Path,
             input_dir: &Path,
         ) -> Result<Self> {
-            let console = ConsoleModeGuard::enter_graphics_mode()?;
+            let console = match ConsoleModeGuard::enter_graphics_mode() {
+                Ok(console) => Some(console),
+                Err(error) => {
+                    eprintln!(
+                        "warning: could not switch the active tty into graphics mode: {error}"
+                    );
+                    None
+                }
+            };
             let framebuffer = LinuxFramebuffer::open(framebuffer_path)?;
             let input_devices = discover_input_devices(input_dir)?;
 
@@ -150,7 +158,11 @@ mod platform {
             state.update_input_focus();
             state.stage = "linux-live";
             state.backend.renderer = "software composition to fbdev";
-            state.backend.input = "evdev pointer and keyboard";
+            state.backend.input = if console.is_some() {
+                "evdev pointer and keyboard"
+            } else {
+                "evdev pointer and keyboard (tty graphics mode unavailable)"
+            };
 
             Ok(Self {
                 console,
@@ -206,28 +218,23 @@ mod platform {
 
     impl ConsoleModeGuard {
         fn enter_graphics_mode() -> Result<Self> {
-            let file = OpenOptions::new()
-                .read(true)
-                .write(true)
-                .open("/dev/tty")
-                .or_else(|_| {
-                    OpenOptions::new()
-                        .read(true)
-                        .write(true)
-                        .open("/dev/console")
-                })
-                .context("failed to open active Linux console for graphics mode")?;
+            for path in candidate_console_paths()? {
+                let file = match OpenOptions::new().read(true).write(true).open(&path) {
+                    Ok(file) => file,
+                    Err(_) => continue,
+                };
 
-            // The Linux text console keeps drawing characters until the tty is
-            // switched into graphics mode, so QuailDE must claim that mode
-            // before its framebuffer output can stay visible.
-            let status = unsafe { libc::ioctl(file.as_raw_fd(), KDSETMODE, KD_GRAPHICS) };
-            if status < 0 {
-                return Err(std::io::Error::last_os_error())
-                    .context("failed to switch Linux console into graphics mode");
+                // The Linux text console keeps drawing characters until the tty
+                // is switched into graphics mode, so QuailDE tries the current
+                // VT devices directly instead of assuming `/dev/tty` is enough.
+                let status = unsafe { libc::ioctl(file.as_raw_fd(), KDSETMODE, KD_GRAPHICS) };
+                if status >= 0 {
+                    return Ok(Self { file });
+                }
             }
 
-            Ok(Self { file })
+            Err(std::io::Error::last_os_error())
+                .context("failed to switch any available Linux virtual console into graphics mode")
         }
     }
 
@@ -358,6 +365,23 @@ mod platform {
         }
 
         Ok(devices)
+    }
+
+    fn candidate_console_paths() -> Result<Vec<PathBuf>> {
+        let mut paths = vec![PathBuf::from("/dev/tty"), PathBuf::from("/dev/console")];
+
+        // Linux exposes the foreground VT name here, which is more reliable in
+        // VMs than guessing the controlling tty path from the current process.
+        if let Ok(active) = fs::read_to_string("/sys/class/tty/tty0/active") {
+            let active = active.trim();
+            if !active.is_empty() {
+                paths.insert(0, PathBuf::from(format!("/dev/{active}")));
+            }
+        }
+
+        paths.sort();
+        paths.dedup();
+        Ok(paths)
     }
 
     fn handle_input_event(state: &mut CompositorState, event: InputEvent) {

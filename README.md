@@ -106,9 +106,10 @@ sudo XDG_RUNTIME_DIR=/tmp/quailde-runtime ./target/debug/quail-compositor --sess
 Notes:
 
 - this raw live path currently targets Linux `fbdev` plus `evdev`
-- QuailDE now switches the active Linux tty into graphics mode while it runs, then restores text mode on exit
+- QuailDE now tries to switch the active Linux tty into graphics mode while it runs, then restores text mode on exit when that succeeds
 - press `Esc` to exit
 - arrow keys also move the software cursor if mouse input is unavailable
+- if you see a warning about graphics mode, the VM likely is not exposing a switchable virtual console; QuailDE may still run, but the text tty can keep painting over it
 - some VMs or kernels may not expose `/dev/fb0`; this is the first visible backend, not the final output architecture
 
 ## Near-term roadmap

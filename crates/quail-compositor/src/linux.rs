@@ -183,6 +183,19 @@ mod platform {
                 }
             };
             let input_devices = discover_input_devices(input_dir)?;
+            state.clamp_cursor();
+            state.update_input_focus();
+
+            // Present one full desktop frame immediately so the new scanout is
+            // never left showing an all-black bootstrap buffer on startup.
+            let initial_frame = compose_scene(state);
+            match &mut output {
+                OutputBackend::Drm(drm) => drm.present(&initial_frame)?,
+                OutputBackend::Framebuffer(framebuffer) => framebuffer.present(&initial_frame)?,
+            }
+            state.last_frame_checksum = initial_frame.checksum;
+            state.last_frame_painted_surfaces = initial_frame.painted_surfaces;
+            state.presented_frames = 1;
 
             Ok(Self {
                 console,

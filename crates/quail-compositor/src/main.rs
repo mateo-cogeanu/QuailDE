@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::thread;
 use std::time::Duration;
 
@@ -25,6 +26,10 @@ struct Cli {
     #[arg(long, value_enum, default_value_t = RuntimeBackend::Raw)]
     backend: RuntimeBackend,
 
+    /// Write the current software-composed frame to a PPM image file.
+    #[arg(long)]
+    dump_frame: Option<PathBuf>,
+
     /// Run initialization once and exit instead of holding the process open
     #[arg(long)]
     once: bool,
@@ -36,6 +41,7 @@ fn main() -> Result<()> {
         session_name: cli.session,
         socket_prefix: cli.socket_prefix,
         backend: cli.backend,
+        dump_frame: cli.dump_frame,
         once: cli.once,
     })?;
     let state = report.state;

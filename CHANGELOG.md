@@ -13,3 +13,4 @@
 - Pivoted QuailDE’s runtime and docs toward a Smithay-oriented backend path so future work is aimed at a usable daily-ish desktop instead of only raw protocol experiments.
 - Restored raw QuailDE as the primary architecture in docs and config, keeping Wayland as the protocol but moving feature work back onto QuailDE’s own compositor path.
 - Added real shared-memory pool mapping and in-memory software composition so committed surfaces now produce a composed software frame instead of only metadata counters.
+- Added `--dump-frame` support so QuailDE can export its current software-composed output to a PPM image for real-world inspection before a visible display backend exists.

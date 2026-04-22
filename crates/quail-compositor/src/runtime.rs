@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
@@ -8,6 +9,7 @@ use wayland_server::{Display, ListeningSocket};
 
 use crate::backend::{BackendStatus, RuntimeBackend};
 use crate::protocol::{CompositorGlobal, ShmGlobal};
+use crate::software::{compose_scene, write_ppm};
 use crate::state::CompositorState;
 
 /// RuntimeOptions contains the knobs that shape a single compositor process.
@@ -16,6 +18,7 @@ pub struct RuntimeOptions {
     pub session_name: String,
     pub socket_prefix: String,
     pub backend: RuntimeBackend,
+    pub dump_frame: Option<PathBuf>,
     pub once: bool,
 }
 
@@ -52,6 +55,13 @@ pub fn run_runtime(options: RuntimeOptions) -> Result<RuntimeReport> {
         .unwrap_or_else(|| "<unnamed>".to_string());
 
     state.listening_socket = socket_name;
+
+    if let Some(path) = &options.dump_frame {
+        let frame = compose_scene(&mut state);
+        write_ppm(&frame, path)?;
+        state.last_frame_checksum = frame.checksum;
+        state.last_frame_painted_surfaces = frame.painted_surfaces;
+    }
 
     if options.once {
         return Ok(RuntimeReport { state });

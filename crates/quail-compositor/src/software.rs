@@ -1,11 +1,19 @@
+use std::fs;
+use std::path::Path;
+
+use anyhow::{Context, Result};
+
 use crate::scene::BufferSnapshot;
 use crate::state::CompositorState;
 
 /// SoftwareFrame summarizes the current in-memory composition result.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct SoftwareFrame {
+    pub width: usize,
+    pub height: usize,
     pub checksum: u64,
     pub painted_surfaces: usize,
+    pub pixels: Vec<u32>,
 }
 
 /// compose_scene paints the committed scene into an in-memory XRGB8888 frame so
@@ -14,26 +22,46 @@ pub fn compose_scene(state: &mut CompositorState) -> SoftwareFrame {
     let width = usize::try_from(state.composed_width).unwrap_or(1280);
     let height = usize::try_from(state.composed_height).unwrap_or(720);
 
-    let mut frame = vec![0xFF101820_u32; width.saturating_mul(height)];
+    let mut pixels = vec![0xFF101820_u32; width.saturating_mul(height)];
     let mut painted_surfaces = 0;
 
     for surface in state.scene.surfaces.values() {
         if let Some(buffer) = &surface.committed_buffer {
-            if paint_surface(&mut frame, width, height, buffer) {
+            if paint_surface(&mut pixels, width, height, buffer) {
                 painted_surfaces += 1;
             }
         }
     }
 
-    let checksum = frame.iter().fold(0_u64, |acc, pixel| {
+    let checksum = pixels.iter().fold(0_u64, |acc, pixel| {
         acc.wrapping_mul(1_099_511_628_211)
             .wrapping_add(u64::from(*pixel))
     });
 
     SoftwareFrame {
+        width,
+        height,
         checksum,
         painted_surfaces,
+        pixels,
     }
+}
+
+/// write_ppm exports the current composed frame to a simple binary PPM image so
+/// QuailDE can be inspected before a real output backend exists.
+pub fn write_ppm(frame: &SoftwareFrame, path: &Path) -> Result<()> {
+    let mut bytes = Vec::with_capacity(
+        format!("P6\n{} {}\n255\n", frame.width, frame.height).len()
+            + frame.pixels.len().saturating_mul(3),
+    );
+    bytes.extend_from_slice(format!("P6\n{} {}\n255\n", frame.width, frame.height).as_bytes());
+
+    for pixel in &frame.pixels {
+        let [blue, green, red, _alpha] = pixel.to_le_bytes();
+        bytes.extend_from_slice(&[red, green, blue]);
+    }
+
+    fs::write(path, bytes).with_context(|| format!("failed to write {}", path.display()))
 }
 
 fn paint_surface(

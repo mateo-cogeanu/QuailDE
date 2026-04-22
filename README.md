@@ -72,6 +72,17 @@ cargo run -p quail-compositor -- --once --session QuailDE --backend raw
 
 That command initializes `wl_display`, binds a `quailde-*` socket, reports the socket name, and exits.
 
+To dump QuailDE's current software-composed frame into an image you can inspect:
+
+```bash
+mkdir -p /tmp/quailde-runtime
+XDG_RUNTIME_DIR=/tmp/quailde-runtime cargo run -p quail-compositor -- --once --session QuailDE --backend raw --dump-frame /tmp/quailde-frame.ppm
+```
+
+Then open `/tmp/quailde-frame.ppm` with any image viewer that supports PPM files.
+
+On macOS, `/tmp` may resolve to `/private/tmp`, so the file may appear at `/private/tmp/quailde-frame.ppm`.
+
 QuailDE also now advertises a real `wl_compositor` global and can initialize `wl_surface`, `wl_region`, and frame callback objects. It still does not render yet, but clients can begin binding core objects against the server.
 
 The next protocol layer is now present too: QuailDE advertises `wl_shm`, accepts shared-memory pool creation, and tracks `wl_buffer` objects. That means clients can start negotiating software-rendered buffers with the compositor, even though QuailDE still does not paint them yet.

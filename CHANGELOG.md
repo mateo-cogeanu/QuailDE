@@ -21,3 +21,4 @@
 - Hardened tty graphics-mode startup so QuailDE now tries the active Linux VT explicitly and falls back to a warning instead of aborting when a VM does not expose a switchable console device.
 - Made tty graphics-mode opt-in instead of implicit so QuailDE no longer risks trapping the user on a Linux console during routine testing.
 - Added a preferred DRM/KMS live output path on `/dev/dri/card0` using a dumb buffer and legacy modesetting, with `fbdev` kept as a fallback when direct DRM setup fails.
+- Fixed the DRM/KMS output module to import the dumb-buffer trait methods explicitly so Linux builds can call `size()` and `pitch()` correctly.

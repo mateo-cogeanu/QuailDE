@@ -10,6 +10,8 @@ use anyhow::{Context, Result, bail};
 #[cfg(target_os = "linux")]
 use drm::Device as BasicDevice;
 #[cfg(target_os = "linux")]
+use drm::buffer::Buffer as DrmBuffer;
+#[cfg(target_os = "linux")]
 use drm::buffer::DrmFourcc;
 #[cfg(target_os = "linux")]
 use drm::control::connector;

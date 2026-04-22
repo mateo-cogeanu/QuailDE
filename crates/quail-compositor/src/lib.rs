@@ -1,3 +1,4 @@
+pub mod apps;
 pub mod backend;
 pub mod drm_output;
 pub mod linux;

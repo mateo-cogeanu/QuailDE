@@ -3,6 +3,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 
+use crate::apps::AppCategory;
 use crate::scene::{BufferSnapshot, SceneSurface};
 use crate::state::CompositorState;
 
@@ -28,7 +29,7 @@ pub fn compose_scene(state: &mut CompositorState) -> SoftwareFrame {
     paint_background(&mut pixels, width, height);
     paint_panel(&mut pixels, width, height);
     paint_status_area(&mut pixels, width, height);
-    paint_dock(&mut pixels, width, height);
+    paint_system_dock(&mut pixels, width, height, state);
     paint_desktop_icons(&mut pixels, width, height);
 
     let mut ordered_surfaces = state.scene.surfaces.values().collect::<Vec<_>>();
@@ -242,7 +243,7 @@ fn paint_status_area(frame: &mut [u32], width: usize, height: usize) {
     );
 }
 
-fn paint_dock(frame: &mut [u32], width: usize, height: usize) {
+fn paint_system_dock(frame: &mut [u32], width: usize, height: usize, state: &CompositorState) {
     let dock_width = width.min(340);
     let dock_height = 72;
     let dock_x = (width.saturating_sub(dock_width)) / 2;
@@ -259,24 +260,16 @@ fn paint_dock(frame: &mut [u32], width: usize, height: usize) {
         0xCC182132,
     );
 
-    for index in 0..5 {
+    for (index, app) in state.installed_apps.iter().take(5).enumerate() {
         let icon_x = dock_x + 24 + index * 62;
-        fill_rect(
-            frame,
-            width,
-            height,
-            icon_x,
-            dock_y + 14,
-            44,
-            44,
-            match index {
-                0 => 0xFF4F8EF7,
-                1 => 0xFFFFB347,
-                2 => 0xFF7CD992,
-                3 => 0xFFF279A2,
-                _ => 0xFFC2D3E8,
-            },
-        );
+        let color = match app.category {
+            AppCategory::Terminal => 0xFF4F8EF7,
+            AppCategory::Browser => 0xFFFFB347,
+            AppCategory::Files => 0xFF7CD992,
+            AppCategory::Editor => 0xFFF279A2,
+            AppCategory::Utility => 0xFFC2D3E8,
+        };
+        fill_rect(frame, width, height, icon_x, dock_y + 14, 44, 44, color);
         fill_rect(
             frame,
             width,
@@ -286,6 +279,17 @@ fn paint_dock(frame: &mut [u32], width: usize, height: usize) {
             24,
             24,
             0xFFF6FAFF,
+        );
+        let label_width = app.name.len().min(6).saturating_mul(5).max(18);
+        fill_rect(
+            frame,
+            width,
+            height,
+            icon_x + 6,
+            dock_y + 62,
+            label_width,
+            4,
+            0xCCD9E7F6,
         );
     }
 }

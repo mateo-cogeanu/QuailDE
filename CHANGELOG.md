@@ -28,3 +28,4 @@
 - Hardened the DRM/KMS scanout path with a direct startup test pattern and an explicit CRTC refresh on frame present so VM GPUs are less likely to stay stuck on a stale black buffer.
 - Fixed two Linux-only compile issues in the DRM test-pattern path by typing the startup pixels explicitly and computing the dumb-buffer pitch before taking the mutable map borrow.
 - Removed fake placeholder windows and turned the raw compositor into a basic real window manager for `xdg_toplevel` surfaces, with focus tracking, server-side decorations, and drag-to-move behavior driven by the mouse.
+- Smoothed VM mouse handling by scaling absolute-pointer devices from their observed input range instead of a hard-coded constant, and added a small system-app catalog so QuailDE can auto-launch a real terminal and open installed apps from the dock.

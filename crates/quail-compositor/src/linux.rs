@@ -134,6 +134,10 @@ mod platform {
     struct InputDevice {
         _path: PathBuf,
         file: File,
+        abs_x_min: Option<i32>,
+        abs_x_max: Option<i32>,
+        abs_y_min: Option<i32>,
+        abs_y_max: Option<i32>,
     }
 
     impl LinuxPlatform {
@@ -240,7 +244,7 @@ mod platform {
                                 let event = unsafe {
                                     std::ptr::read_unaligned(chunk.as_ptr() as *const InputEvent)
                                 };
-                                handle_input_event(state, event);
+                                handle_input_event(state, device, event);
                             }
                         }
                         Err(error) if error.kind() == ErrorKind::WouldBlock => break,
@@ -400,7 +404,14 @@ mod platform {
                 .custom_flags(libc::O_NONBLOCK)
                 .open(&path)
                 .with_context(|| format!("failed to open input device {}", path.display()))?;
-            devices.push(InputDevice { _path: path, file });
+            devices.push(InputDevice {
+                _path: path,
+                file,
+                abs_x_min: None,
+                abs_x_max: None,
+                abs_y_min: None,
+                abs_y_max: None,
+            });
         }
 
         Ok(devices)
@@ -423,7 +434,11 @@ mod platform {
         Ok(paths)
     }
 
-    fn handle_input_event(state: &mut CompositorState, event: InputEvent) {
+    fn handle_input_event(
+        state: &mut CompositorState,
+        device: &mut InputDevice,
+        event: InputEvent,
+    ) {
         state.input_events_processed += 1;
         state.last_input_event = format!(
             "type={} code={} value={}",
@@ -434,19 +449,30 @@ mod platform {
             (EV_REL, REL_X, delta) => state.cursor_x = state.cursor_x.saturating_add(delta),
             (EV_REL, REL_Y, delta) => state.cursor_y = state.cursor_y.saturating_add(delta),
             (EV_ABS, ABS_X, value) => {
-                state.cursor_x = value
-                    .saturating_mul(state.composed_width.max(1))
-                    .checked_div(32_767)
-                    .unwrap_or(state.cursor_x);
+                update_axis_range(&mut device.abs_x_min, &mut device.abs_x_max, value);
+                state.cursor_x = map_absolute_axis(
+                    value,
+                    device.abs_x_min,
+                    device.abs_x_max,
+                    state.composed_width,
+                    state.cursor_x,
+                );
             }
             (EV_ABS, ABS_Y, value) => {
-                state.cursor_y = value
-                    .saturating_mul(state.composed_height.max(1))
-                    .checked_div(32_767)
-                    .unwrap_or(state.cursor_y);
+                update_axis_range(&mut device.abs_y_min, &mut device.abs_y_max, value);
+                state.cursor_y = map_absolute_axis(
+                    value,
+                    device.abs_y_min,
+                    device.abs_y_max,
+                    state.composed_height,
+                    state.cursor_y,
+                );
             }
             (EV_KEY, BTN_LEFT, 1) => {
                 state.pointer_buttons_pressed = 1;
+                if let Some(index) = state.dock_app_at_cursor() {
+                    state.pending_launch = Some(index);
+                }
                 state.begin_window_drag();
             }
             (EV_KEY, BTN_LEFT, 0) => {
@@ -463,6 +489,31 @@ mod platform {
         state.clamp_cursor();
         state.update_drag();
         state.update_input_focus();
+    }
+
+    fn update_axis_range(min: &mut Option<i32>, max: &mut Option<i32>, value: i32) {
+        *min = Some(min.map_or(value, |current| current.min(value)));
+        *max = Some(max.map_or(value, |current| current.max(value)));
+    }
+
+    fn map_absolute_axis(
+        value: i32,
+        min: Option<i32>,
+        max: Option<i32>,
+        output_extent: i32,
+        fallback: i32,
+    ) -> i32 {
+        let Some(min) = min else { return fallback };
+        let Some(max) = max else { return fallback };
+        let span = max.saturating_sub(min);
+        if span <= 8 {
+            return fallback;
+        }
+        let normalized = value.saturating_sub(min);
+        normalized
+            .saturating_mul(output_extent.saturating_sub(1).max(1))
+            .checked_div(span)
+            .unwrap_or(fallback)
     }
 
     pub fn create_linux_platform(

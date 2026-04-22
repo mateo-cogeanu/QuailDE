@@ -8,6 +8,7 @@ use wayland_protocols::xdg::shell::server::xdg_wm_base::XdgWmBase;
 use wayland_server::protocol::{wl_compositor::WlCompositor, wl_seat::WlSeat, wl_shm::WlShm};
 use wayland_server::{Display, ListeningSocket};
 
+use crate::apps::{AppCategory, discover_system_apps, spawn_app};
 use crate::backend::{BackendStatus, RuntimeBackend};
 use crate::linux::create_linux_platform;
 use crate::protocol::{CompositorGlobal, SeatGlobal, ShmGlobal, XdgWmBaseGlobal};
@@ -67,6 +68,7 @@ pub fn run_runtime(options: RuntimeOptions) -> Result<RuntimeReport> {
         .unwrap_or_else(|| "<unnamed>".to_string());
 
     state.listening_socket = socket_name;
+    state.installed_apps = discover_system_apps();
 
     if let Some(path) = &options.dump_frame {
         let frame = compose_scene(&mut state);
@@ -74,6 +76,8 @@ pub fn run_runtime(options: RuntimeOptions) -> Result<RuntimeReport> {
         state.last_frame_checksum = frame.checksum;
         state.last_frame_painted_surfaces = frame.painted_surfaces;
     }
+
+    launch_startup_apps(&mut state)?;
 
     if options.once {
         return Ok(RuntimeReport { state });
@@ -102,6 +106,7 @@ pub fn run_runtime(options: RuntimeOptions) -> Result<RuntimeReport> {
         if let Some(platform) = linux_platform.as_mut() {
             platform.tick(&mut state)?;
         }
+        launch_pending_app(&mut state)?;
         display
             .flush_clients()
             .context("failed to flush Wayland client buffers")?;
@@ -112,6 +117,39 @@ pub fn run_runtime(options: RuntimeOptions) -> Result<RuntimeReport> {
     }
 
     Ok(RuntimeReport { state })
+}
+
+fn launch_startup_apps(state: &mut CompositorState) -> Result<()> {
+    let Some(runtime_dir) = std::env::var_os("XDG_RUNTIME_DIR") else {
+        return Ok(());
+    };
+    let runtime_dir = PathBuf::from(runtime_dir);
+    if let Some(terminal) = state
+        .installed_apps
+        .iter()
+        .find(|app| app.category == AppCategory::Terminal)
+        .cloned()
+    {
+        spawn_app(&terminal, &state.listening_socket, &runtime_dir)?;
+        state.startup_apps_launched += 1;
+        state.last_launched_app = terminal.name;
+    }
+    Ok(())
+}
+
+fn launch_pending_app(state: &mut CompositorState) -> Result<()> {
+    let Some(index) = state.pending_launch.take() else {
+        return Ok(());
+    };
+    let Some(runtime_dir) = std::env::var_os("XDG_RUNTIME_DIR") else {
+        return Ok(());
+    };
+    let runtime_dir = PathBuf::from(runtime_dir);
+    if let Some(app) = state.installed_apps.get(index).cloned() {
+        spawn_app(&app, &state.listening_socket, &runtime_dir)?;
+        state.last_launched_app = app.name;
+    }
+    Ok(())
 }
 
 fn accept_clients(

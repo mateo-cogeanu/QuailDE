@@ -1,3 +1,4 @@
+use crate::apps::DesktopApp;
 use crate::backend::BackendStatus;
 use crate::output::OutputState;
 use crate::scene::SceneGraph;
@@ -52,6 +53,10 @@ pub struct CompositorState {
     pub last_input_focus_surface: String,
     pub input_events_processed: usize,
     pub last_input_event: String,
+    pub installed_apps: Vec<DesktopApp>,
+    pub pending_launch: Option<usize>,
+    pub startup_apps_launched: usize,
+    pub last_launched_app: String,
     pub pointer_buttons_pressed: usize,
     pub cursor_x: i32,
     pub cursor_y: i32,
@@ -113,6 +118,10 @@ impl CompositorState {
             last_input_focus_surface: "none".to_string(),
             input_events_processed: 0,
             last_input_event: "none".to_string(),
+            installed_apps: Vec::new(),
+            pending_launch: None,
+            startup_apps_launched: 0,
+            last_launched_app: "none".to_string(),
             pointer_buttons_pressed: 0,
             cursor_x: 96,
             cursor_y: 96,
@@ -206,6 +215,9 @@ impl CompositorState {
             ),
             format!("  input events processed: {}", self.input_events_processed),
             format!("  last input event: {}", self.last_input_event),
+            format!("  discovered apps: {}", self.installed_apps.len()),
+            format!("  startup apps launched: {}", self.startup_apps_launched),
+            format!("  last launched app: {}", self.last_launched_app),
             format!(
                 "  pointer buttons pressed: {}",
                 self.pointer_buttons_pressed
@@ -331,5 +343,27 @@ impl CompositorState {
     /// end_pointer_press releases any active drag grab.
     pub fn end_pointer_press(&mut self) {
         self.dragging_surface_id = None;
+    }
+
+    /// dock_app_at_cursor resolves the dock slot under the cursor to a
+    /// discovered application index so clicks can launch installed apps.
+    pub fn dock_app_at_cursor(&self) -> Option<usize> {
+        let dock_width = self.composed_width.max(0).min(340) as usize;
+        let dock_height = 72_usize;
+        let width = self.composed_width.max(0) as usize;
+        let height = self.composed_height.max(0) as usize;
+        let dock_x = (width.saturating_sub(dock_width)) / 2;
+        let dock_y = height.saturating_sub(dock_height + 18);
+        let cursor_x = self.cursor_x.max(0) as usize;
+        let cursor_y = self.cursor_y.max(0) as usize;
+
+        if cursor_y < dock_y + 14 || cursor_y >= dock_y + 58 {
+            return None;
+        }
+
+        (0..self.installed_apps.len().min(5)).find(|index| {
+            let icon_x = dock_x + 24 + index * 62;
+            cursor_x >= icon_x && cursor_x < icon_x + 44
+        })
     }
 }

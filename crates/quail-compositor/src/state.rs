@@ -1,5 +1,6 @@
 use crate::backend::BackendStatus;
 use crate::output::OutputState;
+use crate::scene::SceneGraph;
 use crate::shell::ShellSurfaceState;
 
 /// CompositorState collects the runtime pieces we need before a real desktop
@@ -26,6 +27,11 @@ pub struct CompositorState {
     pub tracked_surfaces: usize,
     pub mapped_surfaces: usize,
     pub last_committed_surface: String,
+    pub scene: SceneGraph,
+    pub composed_width: i32,
+    pub composed_height: i32,
+    pub last_frame_checksum: u64,
+    pub last_frame_painted_surfaces: usize,
 }
 
 impl CompositorState {
@@ -51,6 +57,11 @@ impl CompositorState {
             tracked_surfaces: 0,
             mapped_surfaces: 0,
             last_committed_surface: "none".to_string(),
+            scene: SceneGraph::default(),
+            composed_width: 1280,
+            composed_height: 720,
+            last_frame_checksum: 0,
+            last_frame_painted_surfaces: 0,
         }
     }
 
@@ -63,8 +74,8 @@ impl CompositorState {
         ]
     }
 
-    pub fn summary_lines(&self) -> [String; 21] {
-        [
+    pub fn summary_lines(&self) -> Vec<String> {
+        vec![
             format!("  session: {}", self.session_name),
             format!("  stage: {}", self.stage),
             format!("  display server: {}", self.backend.display_server),
@@ -98,6 +109,15 @@ impl CompositorState {
             format!("  tracked surfaces: {}", self.tracked_surfaces),
             format!("  mapped surfaces: {}", self.mapped_surfaces),
             format!("  last committed surface: {}", self.last_committed_surface),
+            format!(
+                "  software output: {}x{}",
+                self.composed_width, self.composed_height
+            ),
+            format!("  frame checksum: {}", self.last_frame_checksum),
+            format!(
+                "  painted surfaces in last frame: {}",
+                self.last_frame_painted_surfaces
+            ),
         ]
     }
 }

@@ -32,7 +32,7 @@ pub fn run_runtime(options: RuntimeOptions) -> Result<RuntimeReport> {
     state.backend = BackendStatus::for_backend(options.backend);
     state.stage = match options.backend {
         RuntimeBackend::Raw => "wayland-bootstrap",
-        RuntimeBackend::Smithay => "smithay-pivot",
+        RuntimeBackend::Smithay => "experimental-backend",
     };
 
     let mut display = Display::<CompositorState>::new().context("failed to create wl_display")?;
@@ -55,12 +55,6 @@ pub fn run_runtime(options: RuntimeOptions) -> Result<RuntimeReport> {
 
     if options.once {
         return Ok(RuntimeReport { state });
-    }
-
-    if matches!(options.backend, RuntimeBackend::Smithay) {
-        eprintln!(
-            "QuailDE smithay path selected: still using the current bootstrap loop while backend integration lands."
-        );
     }
 
     // This loop is intentionally small: it accepts clients, dispatches pending

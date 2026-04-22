@@ -8,4 +8,5 @@ license = "MIT"
 [dependencies]
 anyhow = "1.0"
 clap = { version = "4.5", features = ["derive"] }
+memmap2 = "0.9"
 wayland-server = "0.31.13"

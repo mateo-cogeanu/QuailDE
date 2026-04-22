@@ -22,7 +22,7 @@ struct Cli {
     socket_prefix: String,
 
     /// Select the compositor implementation path.
-    #[arg(long, value_enum, default_value_t = RuntimeBackend::Smithay)]
+    #[arg(long, value_enum, default_value_t = RuntimeBackend::Raw)]
     backend: RuntimeBackend,
 
     /// Run initialization once and exit instead of holding the process open

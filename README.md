@@ -30,7 +30,7 @@ Right now QuailDE contains:
 - TOML-based session configuration
 - a session launcher that can dry-run or supervise child processes
 - a bundled compositor skeleton binary
-- an explicit Smithay-oriented backend path for future usability work
+- a raw QuailDE compositor path built directly on the Wayland protocol
 - architecture and vision docs
 - a project layout that can expand into a real shell
 
@@ -62,14 +62,12 @@ The example config lives at [`quailde.example.toml`](quailde.example.toml). The 
 
 QuailDE now includes a bundled compositor placeholder at [`crates/quail-compositor`](crates/quail-compositor). It is not a real Wayland compositor yet, but it gives the session bootstrap a Quail-owned runtime target and defines the next boundary we should implement.
 
-For a usable desktop, QuailDE is now explicitly pivoting toward a Smithay-oriented architecture rather than continuing to grow only through hand-rolled protocol code. The current `--backend smithay` path still reuses the bootstrap loop underneath, but it sets the direction for the next real implementation steps.
-
 The compositor crate now has explicit modules for backend, output, shell-surface, runtime, and overall state so we can replace placeholders with real Wayland pieces incrementally instead of rewriting one large file later.
 
 The current compositor bootstrap can also create a real Wayland display socket. On Linux with `XDG_RUNTIME_DIR` set, try:
 
 ```bash
-cargo run -p quail-compositor -- --once --session QuailDE --backend smithay
+cargo run -p quail-compositor -- --once --session QuailDE --backend raw
 ```
 
 That command initializes `wl_display`, binds a `quailde-*` socket, reports the socket name, and exits.
@@ -80,9 +78,11 @@ The next protocol layer is now present too: QuailDE advertises `wl_shm`, accepts
 
 QuailDE now also remembers pending and committed surface buffer state. That is the first real scene-management step toward a software renderer, because buffer attachments are no longer thrown away immediately after the request is parsed.
 
+QuailDE now maps shared-memory pools and composes committed surfaces into an in-memory software output buffer. There is still no visible display backend yet, but the compositor is now reading real client pixels instead of only tracking metadata.
+
 ## Near-term roadmap
 
-- land the first Smithay-backed compositor runtime
+- harden shared-memory buffers and software composition
 - add xdg-shell, seat, and output handling
 - paint the first visible shell surface
 - add panel, launcher, and notifications

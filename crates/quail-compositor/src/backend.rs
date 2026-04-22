@@ -10,12 +10,12 @@ pub struct BackendStatus {
 }
 
 /// RuntimeBackend selects which compositor implementation path QuailDE should
-/// take while we evolve from protocol experiments toward a usable shell.
+/// take while we evolve the compositor. Raw QuailDE remains the default path.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum RuntimeBackend {
-    /// Keep the current hand-rolled protocol bootstrap for low-level testing.
+    /// Keep QuailDE on its own hand-rolled compositor path.
     Raw,
-    /// Follow the Smithay-oriented path that is realistic for a daily-ish DE.
+    /// Reserved for future experiments that should not replace the raw path.
     Smithay,
 }
 
@@ -36,9 +36,9 @@ impl BackendStatus {
                 input: "not registered",
             },
             RuntimeBackend::Smithay => Self {
-                display_server: "smithay-oriented bootstrap",
-                renderer: "smithay renderer path planned",
-                input: "smithay seat path planned",
+                display_server: "experimental backend",
+                renderer: "experimental renderer path",
+                input: "experimental input path",
             },
         }
     }

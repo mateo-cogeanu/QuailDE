@@ -7,7 +7,7 @@ dry_run = true
 [launch.compositor]
 name = "compositor"
 command = "quail-compositor"
-args = ["--session", "QuailDE", "--backend", "smithay"]
+args = ["--session", "QuailDE", "--backend", "raw"]
 optional = false
 
 [[launch.services]]

@@ -2,14 +2,14 @@
 #[derive(Debug, Clone)]
 pub struct OutputState {
     pub detected_outputs: usize,
-    pub layout: &'static str,
+    pub layout: String,
 }
 
 impl OutputState {
     pub fn placeholder() -> Self {
         Self {
             detected_outputs: 0,
-            layout: "not enumerated",
+            layout: "not enumerated".to_string(),
         }
     }
 }

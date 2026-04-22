@@ -1,6 +1,4 @@
 use std::path::PathBuf;
-use std::thread;
-use std::time::Duration;
 
 use anyhow::Result;
 use clap::Parser;
@@ -30,6 +28,14 @@ struct Cli {
     #[arg(long)]
     dump_frame: Option<PathBuf>,
 
+    /// Linux framebuffer device used for the first live raw output path.
+    #[arg(long, default_value = "/dev/fb0")]
+    framebuffer: PathBuf,
+
+    /// Linux input directory used to discover evdev devices.
+    #[arg(long, default_value = "/dev/input")]
+    input_dir: PathBuf,
+
     /// Run initialization once and exit instead of holding the process open
     #[arg(long)]
     once: bool,
@@ -42,6 +48,8 @@ fn main() -> Result<()> {
         socket_prefix: cli.socket_prefix,
         backend: cli.backend,
         dump_frame: cli.dump_frame,
+        framebuffer: cli.framebuffer,
+        input_dir: cli.input_dir,
         once: cli.once,
     })?;
     let state = report.state;
@@ -63,11 +71,6 @@ fn main() -> Result<()> {
     }
 
     println!();
-    println!("Compositor bootstrap is alive. Waiting for clients on the Wayland socket.");
-
-    // The runtime loop is entered before this point when `--once` is not used.
-    // This fallback is unreachable today, but keeps control flow explicit.
-    loop {
-        thread::sleep(Duration::from_secs(60));
-    }
+    println!("QuailDE runtime exited.");
+    Ok(())
 }

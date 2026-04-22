@@ -126,11 +126,14 @@ impl Dispatch<WlCompositor, CompositorGlobal> for CompositorState {
                     },
                 );
                 let object_id = surface.id().protocol_id();
+                let surface_index = _state.tracked_surfaces;
                 _state.tracked_surfaces += 1;
                 _state.scene.surfaces.insert(
                     object_id,
                     SceneSurface {
                         object_id,
+                        x: 48 + (surface_index as i32 % 6) * 28,
+                        y: 72 + (surface_index as i32 % 6) * 28,
                         ..SceneSurface::default()
                     },
                 );
@@ -353,6 +356,7 @@ impl Dispatch<WlSurface, SurfaceState> for CompositorState {
                     .values()
                     .filter(|surface| surface.committed_buffer.is_some())
                     .count();
+                state.update_input_focus();
             }
             wayland_server::protocol::wl_surface::Request::Attach { buffer, .. } => {
                 let has_buffer = buffer.is_some();
@@ -618,6 +622,8 @@ fn update_scene_surface(state: &mut CompositorState, object_id: u32, slots: &Sur
         .entry(object_id)
         .or_insert(SceneSurface {
             object_id,
+            x: 48,
+            y: 72,
             ..SceneSurface::default()
         });
     scene_surface.committed_buffer = slots.committed_buffer.clone();

@@ -93,13 +93,27 @@ QuailDE now maps shared-memory pools and composes committed surfaces into an in-
 
 QuailDE now also advertises `xdg_wm_base` and can initialize `xdg_surface` and `xdg_toplevel` objects, including basic configure and ack bookkeeping. That is the protocol groundwork desktop-style Wayland applications expect before they can behave like real windows.
 
-QuailDE now also advertises `wl_seat` with pointer and keyboard capabilities. The compositor still does not have live focus, cursor motion, or key dispatch yet, but clients can already bind the core input objects a real desktop session depends on.
+QuailDE now also advertises `wl_seat` with pointer and keyboard capabilities. The compositor also has a first raw Linux live path: it can draw its software-composed desktop frame to `/dev/fb0` and read mouse or keyboard events from `/dev/input/event*`.
+
+On a Linux VM with no desktop environment, you can now try the first visible QuailDE session from a text console:
+
+```bash
+cargo build --workspace
+sudo XDG_RUNTIME_DIR=/tmp/quailde-runtime cargo run -p quail-compositor -- --session QuailDE --backend raw --framebuffer /dev/fb0 --input-dir /dev/input
+```
+
+Notes:
+
+- this raw live path currently targets Linux `fbdev` plus `evdev`
+- press `Esc` to exit
+- arrow keys also move the software cursor if mouse input is unavailable
+- some VMs or kernels may not expose `/dev/fb0`; this is the first visible backend, not the final output architecture
 
 ## Near-term roadmap
 
 - harden shared-memory buffers and software composition
-- harden seat state into real focus, cursor, and key dispatch
-- add a live output backend and visible redraw path
+- harden raw Linux focus and pointer behavior beyond the desktop root
+- add direct-output paths beyond the initial fbdev preview
 - paint the first visible shell surface
 - add panel, launcher, and notifications
 - make QuailDE usable for terminal/browser/editor workflows

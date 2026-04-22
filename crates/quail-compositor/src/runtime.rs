@@ -9,6 +9,7 @@ use wayland_server::protocol::{wl_compositor::WlCompositor, wl_seat::WlSeat, wl_
 use wayland_server::{Display, ListeningSocket};
 
 use crate::backend::{BackendStatus, RuntimeBackend};
+use crate::linux::create_linux_platform;
 use crate::protocol::{CompositorGlobal, SeatGlobal, ShmGlobal, XdgWmBaseGlobal};
 use crate::software::{compose_scene, write_ppm};
 use crate::state::CompositorState;
@@ -20,6 +21,8 @@ pub struct RuntimeOptions {
     pub socket_prefix: String,
     pub backend: RuntimeBackend,
     pub dump_frame: Option<PathBuf>,
+    pub framebuffer: PathBuf,
+    pub input_dir: PathBuf,
     pub once: bool,
 }
 
@@ -74,18 +77,37 @@ pub fn run_runtime(options: RuntimeOptions) -> Result<RuntimeReport> {
         return Ok(RuntimeReport { state });
     }
 
-    // This loop is intentionally small: it accepts clients, dispatches pending
-    // protocol requests, flushes responses, and sleeps briefly.
+    let mut linux_platform = if options.backend == RuntimeBackend::Raw {
+        Some(create_linux_platform(
+            &mut state,
+            &options.framebuffer,
+            &options.input_dir,
+        )?)
+    } else {
+        None
+    };
+
+    // This loop keeps the raw compositor alive: it accepts clients, dispatches
+    // protocol requests, polls Linux input, renders a software frame, and
+    // flushes client responses on a simple fixed cadence.
     loop {
         accept_clients(&socket, &display, &mut state)?;
         display
             .dispatch_clients(&mut state)
             .context("failed to dispatch Wayland client requests")?;
+        if let Some(platform) = linux_platform.as_mut() {
+            platform.tick(&mut state)?;
+        }
         display
             .flush_clients()
             .context("failed to flush Wayland client buffers")?;
+        if state.quit_requested {
+            break;
+        }
         thread::sleep(Duration::from_millis(16));
     }
+
+    Ok(RuntimeReport { state })
 }
 
 fn accept_clients(

@@ -33,7 +33,7 @@ impl BackendStatus {
             RuntimeBackend::Raw => Self {
                 display_server: "wl_display bootstrap",
                 renderer: "manual protocol path",
-                input: "not registered",
+                input: "seat registered, linux raw path pending",
             },
             RuntimeBackend::Smithay => Self {
                 display_server: "experimental backend",

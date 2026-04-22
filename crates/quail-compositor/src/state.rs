@@ -50,6 +50,14 @@ pub struct CompositorState {
     pub pointer_enter_serial: u32,
     pub keyboard_enter_serial: u32,
     pub last_input_focus_surface: String,
+    pub input_events_processed: usize,
+    pub last_input_event: String,
+    pub pointer_buttons_pressed: usize,
+    pub cursor_x: i32,
+    pub cursor_y: i32,
+    pub cursor_visible: bool,
+    pub presented_frames: usize,
+    pub quit_requested: bool,
     pub next_serial: u32,
 }
 
@@ -99,6 +107,14 @@ impl CompositorState {
             pointer_enter_serial: 0,
             keyboard_enter_serial: 0,
             last_input_focus_surface: "none".to_string(),
+            input_events_processed: 0,
+            last_input_event: "none".to_string(),
+            pointer_buttons_pressed: 0,
+            cursor_x: 96,
+            cursor_y: 96,
+            cursor_visible: true,
+            presented_frames: 0,
+            quit_requested: false,
             next_serial: 0,
         }
     }
@@ -180,6 +196,45 @@ impl CompositorState {
                 "  last input focus surface: {}",
                 self.last_input_focus_surface
             ),
+            format!("  input events processed: {}", self.input_events_processed),
+            format!("  last input event: {}", self.last_input_event),
+            format!(
+                "  pointer buttons pressed: {}",
+                self.pointer_buttons_pressed
+            ),
+            format!("  cursor position: {},{}", self.cursor_x, self.cursor_y),
+            format!("  cursor visible: {}", self.cursor_visible),
+            format!("  presented frames: {}", self.presented_frames),
         ]
+    }
+
+    /// clamp_cursor keeps the software cursor inside the current output area.
+    pub fn clamp_cursor(&mut self) {
+        let max_x = self.composed_width.saturating_sub(1).max(0);
+        let max_y = self.composed_height.saturating_sub(1).max(0);
+        self.cursor_x = self.cursor_x.clamp(0, max_x);
+        self.cursor_y = self.cursor_y.clamp(0, max_y);
+    }
+
+    /// update_input_focus maps the cursor position onto the top-most committed
+    /// surface so future keyboard and pointer routing has a live focus target.
+    pub fn update_input_focus(&mut self) {
+        let cursor_x = self.cursor_x;
+        let cursor_y = self.cursor_y;
+        let focused_surface = self.scene.surfaces.iter().rev().find_map(|(id, surface)| {
+            let buffer = surface.committed_buffer.as_ref()?;
+            let width = buffer.width.max(0);
+            let height = buffer.height.max(0);
+            let inside_x = cursor_x >= surface.x && cursor_x < surface.x.saturating_add(width);
+            let inside_y = cursor_y >= surface.y && cursor_y < surface.y.saturating_add(height);
+            if inside_x && inside_y {
+                Some(format!("surface-{id}"))
+            } else {
+                None
+            }
+        });
+
+        self.last_input_focus_surface =
+            focused_surface.unwrap_or_else(|| "desktop-root".to_string());
     }
 }

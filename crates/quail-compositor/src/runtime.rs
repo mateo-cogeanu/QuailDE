@@ -12,6 +12,7 @@ use wayland_server::{Display, ListeningSocket};
 
 use crate::apps::{AppCategory, discover_system_apps, spawn_app};
 use crate::backend::{BackendStatus, RuntimeBackend};
+use crate::launcher::LauncherModel;
 use crate::linux::create_linux_platform;
 use crate::protocol::{CompositorGlobal, OutputGlobal, SeatGlobal, ShmGlobal, XdgWmBaseGlobal};
 use crate::software::{compose_scene, write_ppm};
@@ -74,6 +75,7 @@ pub fn run_runtime(options: RuntimeOptions) -> Result<RuntimeReport> {
 
     state.listening_socket = socket_name;
     state.installed_apps = discover_system_apps();
+    state.launcher = LauncherModel::from_apps(&state.installed_apps);
 
     if let Some(path) = &options.dump_frame {
         let frame = compose_scene(&mut state);

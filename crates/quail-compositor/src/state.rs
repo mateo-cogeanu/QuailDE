@@ -1,8 +1,15 @@
 use crate::apps::DesktopApp;
 use crate::backend::BackendStatus;
+use crate::launcher::LauncherModel;
 use crate::output::OutputState;
 use crate::scene::SceneGraph;
 use crate::shell::ShellSurfaceState;
+use wayland_server::Resource;
+use wayland_server::protocol::{
+    wl_keyboard::{KeyState as KeyboardKeyState, WlKeyboard},
+    wl_pointer::{ButtonState as PointerButtonState, WlPointer},
+    wl_surface::WlSurface,
+};
 
 /// CompositorState collects the runtime pieces we need before a real desktop
 /// session can render windows and shell UI.
@@ -54,6 +61,7 @@ pub struct CompositorState {
     pub input_events_processed: usize,
     pub last_input_event: String,
     pub installed_apps: Vec<DesktopApp>,
+    pub launcher: LauncherModel,
     pub pending_launch: Option<usize>,
     pub startup_apps_launched: usize,
     pub last_launched_app: String,
@@ -65,12 +73,15 @@ pub struct CompositorState {
     pub cursor_y_precise: f32,
     pub cursor_visible: bool,
     pub focused_surface_id: Option<u32>,
+    pub pointer_focus_surface_id: Option<u32>,
     pub dragging_surface_id: Option<u32>,
     pub drag_offset_x: i32,
     pub drag_offset_y: i32,
     pub presented_frames: usize,
     pub quit_requested: bool,
     pub next_serial: u32,
+    pub pointer_resources: Vec<WlPointer>,
+    pub keyboard_resources: Vec<WlKeyboard>,
 }
 
 impl CompositorState {
@@ -122,6 +133,10 @@ impl CompositorState {
             input_events_processed: 0,
             last_input_event: "none".to_string(),
             installed_apps: Vec::new(),
+            launcher: LauncherModel {
+                sections: Vec::new(),
+                entries: Vec::new(),
+            },
             pending_launch: None,
             startup_apps_launched: 0,
             last_launched_app: "none".to_string(),
@@ -133,12 +148,15 @@ impl CompositorState {
             cursor_y_precise: 96.0,
             cursor_visible: true,
             focused_surface_id: None,
+            pointer_focus_surface_id: None,
             dragging_surface_id: None,
             drag_offset_x: 0,
             drag_offset_y: 0,
             presented_frames: 0,
             quit_requested: false,
             next_serial: 0,
+            pointer_resources: Vec::new(),
+            keyboard_resources: Vec::new(),
         }
     }
 
@@ -222,6 +240,7 @@ impl CompositorState {
             format!("  input events processed: {}", self.input_events_processed),
             format!("  last input event: {}", self.last_input_event),
             format!("  discovered apps: {}", self.installed_apps.len()),
+            format!("  launcher entries: {}", self.launcher.entries.len()),
             format!("  startup apps launched: {}", self.startup_apps_launched),
             format!("  last launched app: {}", self.last_launched_app),
             format!("  last launch error: {}", self.last_launch_error),
@@ -234,6 +253,12 @@ impl CompositorState {
             format!(
                 "  focused surface: {}",
                 self.focused_surface_id
+                    .map(|id| format!("surface-{id}"))
+                    .unwrap_or_else(|| "none".to_string())
+            ),
+            format!(
+                "  pointer focus surface: {}",
+                self.pointer_focus_surface_id
                     .map(|id| format!("surface-{id}"))
                     .unwrap_or_else(|| "none".to_string())
             ),
@@ -280,8 +305,9 @@ impl CompositorState {
     pub fn update_input_focus(&mut self) {
         let cursor_x = self.cursor_x;
         let cursor_y = self.cursor_y;
-        self.last_input_focus_surface = self
-            .top_surface_under_cursor(cursor_x, cursor_y)
+        let focus = self.top_surface_under_cursor(cursor_x, cursor_y);
+        self.pointer_focus_surface_id = focus;
+        self.last_input_focus_surface = focus
             .map(|id| format!("surface-{id}"))
             .unwrap_or_else(|| "desktop-root".to_string());
     }
@@ -372,9 +398,36 @@ impl CompositorState {
         self.dragging_surface_id = None;
     }
 
-    /// dock_app_at_cursor resolves the dock slot under the cursor to a
-    /// discovered application index so clicks can launch installed apps.
-    pub fn dock_app_at_cursor(&self) -> Option<usize> {
+    /// launcher_app_at_cursor resolves the launcher grid tile under the cursor
+    /// to a discovered application index so the shell can start real apps.
+    pub fn launcher_app_at_cursor(&self) -> Option<usize> {
+        let height = self.composed_height.max(0) as usize;
+        let panel_height = height.min(620);
+        let panel_x = 18;
+        let panel_y = height.saturating_sub(panel_height + 78);
+        let sidebar_width = 256;
+        let cursor_x = self.cursor_x.max(0) as usize;
+        let cursor_y = self.cursor_y.max(0) as usize;
+
+        self.launcher
+            .entries
+            .iter()
+            .take(8)
+            .enumerate()
+            .find_map(|(index, entry)| {
+                let col = index % 4;
+                let row = index / 4;
+                let tile_x = panel_x + sidebar_width + 28 + col * 116;
+                let tile_y = panel_y + 86 + row * 128;
+                let inside_x = cursor_x >= tile_x && cursor_x < tile_x + 96;
+                let inside_y = cursor_y >= tile_y && cursor_y < tile_y + 102;
+                (inside_x && inside_y).then_some(entry.app_index)
+            })
+    }
+
+    /// panel_app_at_cursor resolves the bottom-panel launcher slot under the
+    /// cursor to a discovered application index.
+    pub fn panel_app_at_cursor(&self) -> Option<usize> {
         let height = self.composed_height.max(0) as usize;
         let dock_y = height.saturating_sub(54);
         let cursor_x = self.cursor_x.max(0) as usize;
@@ -384,9 +437,117 @@ impl CompositorState {
             return None;
         }
 
-        (0..self.installed_apps.len().min(6)).find(|index| {
-            let icon_x = 18 + index * 52;
-            cursor_x >= icon_x && cursor_x < icon_x + 36
-        })
+        self.launcher
+            .entries
+            .iter()
+            .take(6)
+            .enumerate()
+            .find_map(|(index, entry)| {
+                let icon_x = 18 + index * 52;
+                (cursor_x >= icon_x && cursor_x < icon_x + 36).then_some(entry.app_index)
+            })
+    }
+
+    /// route_pointer_motion emits wl_pointer focus and motion events to the
+    /// focused client when the shell cursor moves across the scene.
+    pub fn route_pointer_motion(&mut self) {
+        let serial = self.next_serial();
+        let focus_surface = self.focused_surface();
+
+        if self.pointer_focus_surface_id != self.focused_surface_id {
+            if let Some(previous) = self.pointer_focus_surface_resource() {
+                for pointer in &self.pointer_resources {
+                    pointer.leave(serial, &previous);
+                }
+            }
+        }
+
+        if let Some(surface) = focus_surface {
+            let local_x = self.surface_local_x(surface.id().protocol_id());
+            let local_y = self.surface_local_y(surface.id().protocol_id());
+            if self.pointer_focus_surface_id != Some(surface.id().protocol_id()) {
+                for pointer in &self.pointer_resources {
+                    pointer.enter(serial, &surface, local_x, local_y);
+                    pointer.frame();
+                }
+                self.pointer_enter_serial = serial;
+                self.pointer_focus_surface_id = Some(surface.id().protocol_id());
+            } else {
+                for pointer in &self.pointer_resources {
+                    pointer.motion(0, local_x, local_y);
+                    pointer.frame();
+                }
+            }
+        } else {
+            self.pointer_focus_surface_id = None;
+        }
+    }
+
+    /// route_pointer_button forwards left-button clicks to the focused client
+    /// once shell-level launch and drag handling have already run.
+    pub fn route_pointer_button(&mut self, pressed: bool) {
+        let serial = self.next_serial();
+        let state = if pressed {
+            PointerButtonState::Pressed
+        } else {
+            PointerButtonState::Released
+        };
+        for pointer in &self.pointer_resources {
+            pointer.button(serial, 0, 0x110, state);
+            pointer.frame();
+        }
+    }
+
+    /// route_keyboard_key forwards a raw Linux key code to the focused client.
+    pub fn route_keyboard_key(&mut self, linux_key_code: u32, pressed: bool) {
+        let Some(surface) = self.focused_surface() else {
+            return;
+        };
+        let serial = self.next_serial();
+        if self.keyboard_enter_serial == 0 {
+            for keyboard in &self.keyboard_resources {
+                keyboard.enter(serial, &surface, Vec::new());
+                keyboard.modifiers(serial, 0, 0, 0, 0);
+            }
+            self.keyboard_enter_serial = serial;
+        }
+        let key_state = if pressed {
+            KeyboardKeyState::Pressed
+        } else {
+            KeyboardKeyState::Released
+        };
+        let evdev_key = linux_key_code.saturating_sub(8);
+        for keyboard in &self.keyboard_resources {
+            keyboard.key(serial, 0, evdev_key, key_state);
+        }
+    }
+
+    fn focused_surface(&self) -> Option<WlSurface> {
+        let id = self.focused_surface_id?;
+        self.scene.surfaces.get(&id)?.resource.clone()
+    }
+
+    fn pointer_focus_surface_resource(&self) -> Option<WlSurface> {
+        let id = self.pointer_focus_surface_id?;
+        self.scene.surfaces.get(&id)?.resource.clone()
+    }
+
+    fn surface_local_x(&self, surface_id: u32) -> f64 {
+        let Some(surface) = self.scene.surfaces.get(&surface_id) else {
+            return 0.0;
+        };
+        f64::from(self.cursor_x.saturating_sub(surface.x))
+    }
+
+    fn surface_local_y(&self, surface_id: u32) -> f64 {
+        let Some(surface) = self.scene.surfaces.get(&surface_id) else {
+            return 0.0;
+        };
+        f64::from(self.cursor_y.saturating_sub(surface.y))
+    }
+
+    fn next_serial(&mut self) -> u32 {
+        self.next_serial = self.next_serial.wrapping_add(1).max(1);
+        self.next_serial
     }
 }

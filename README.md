@@ -95,7 +95,7 @@ QuailDE now also advertises `xdg_wm_base` and can initialize `xdg_surface` and `
 
 QuailDE now also advertises `wl_seat` with pointer and keyboard capabilities. The compositor also has a first raw Linux live path: it prefers DRM/KMS on `/dev/dri/card0`, falls back to `/dev/fb0` when DRM setup fails, and reads mouse or keyboard events from `/dev/input/event*`.
 
-The software shell now paints a darker launcher-and-panel desktop inspired by a more traditional DE layout, manages real `xdg_toplevel` client surfaces with dark server-side decorations, focus tracking, and drag-to-move behavior, and can discover installed system apps from desktop entries plus PATH fallbacks so the launcher, bottom panel, and startup session can expose more than a tiny fixed app list. The Linux pointer path still uses kernel-reported absolute-axis ranges with high-resolution easing, but the cursor art is now a more conventional pointer instead of the earlier custom shape.
+The software shell now paints a darker launcher-and-panel desktop inspired by a more traditional DE layout, manages real `xdg_toplevel` client surfaces with dark server-side decorations, focus tracking, and drag-to-move behavior, and can discover installed system apps from desktop entries plus PATH fallbacks so the launcher, bottom panel, and startup session can expose more than a tiny fixed app list. QuailDE also now renders real text from a system font, resolves app icons from the installed icon theme or pixmaps, and has the first real launcher view model plus early pointer and keyboard event delivery into focused Wayland clients.
 
 On a Linux VM with no desktop environment, you can now try the first visible QuailDE session from a text console:
 

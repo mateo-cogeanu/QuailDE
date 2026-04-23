@@ -140,6 +140,7 @@ impl Dispatch<WlCompositor, CompositorGlobal> for CompositorState {
                         object_id,
                         x: 48 + (surface_index as i32 % 6) * 28,
                         y: 72 + (surface_index as i32 % 6) * 28,
+                        resource: Some(surface.clone()),
                         ..SceneSurface::default()
                     },
                 );
@@ -338,10 +339,11 @@ impl Dispatch<WlSeat, SeatGlobal> for CompositorState {
     ) {
         match request {
             wayland_server::protocol::wl_seat::Request::GetPointer { id } => {
-                data_init.init(id, PointerState);
+                let pointer = data_init.init(id, PointerState);
                 state.pointers_created += 1;
                 state.pointer_enter_serial = 0;
                 state.last_input_focus_surface = "pointer-awaiting-focus".to_string();
+                state.pointer_resources.push(pointer);
             }
             wayland_server::protocol::wl_seat::Request::GetKeyboard { id } => {
                 let keyboard = data_init.init(id, KeyboardState);
@@ -350,6 +352,7 @@ impl Dispatch<WlSeat, SeatGlobal> for CompositorState {
                 state.keyboards_created += 1;
                 state.keyboard_enter_serial = 0;
                 state.last_input_focus_surface = "keyboard-awaiting-focus".to_string();
+                state.keyboard_resources.push(keyboard);
             }
             wayland_server::protocol::wl_seat::Request::GetTouch { id: _ } => {}
             wayland_server::protocol::wl_seat::Request::Release => {}
@@ -706,6 +709,7 @@ fn update_scene_surface(state: &mut CompositorState, object_id: u32, slots: &Sur
             object_id,
             x: 48,
             y: 72,
+            resource: None,
             ..SceneSurface::default()
         });
     scene_surface.committed_buffer = slots.committed_buffer.clone();

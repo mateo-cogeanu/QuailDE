@@ -3,6 +3,7 @@ use std::fs::File;
 use std::sync::{Arc, Mutex};
 
 use memmap2::Mmap;
+use wayland_server::protocol::wl_surface::WlSurface;
 
 /// ShmPoolBacking owns the live mmap for one wl_shm_pool so buffers can keep
 /// reading pixels even after the pool object itself is destroyed.
@@ -77,6 +78,7 @@ pub struct SceneSurface {
     pub window_title: String,
     pub app_id: String,
     pub is_toplevel: bool,
+    pub resource: Option<WlSurface>,
     pub committed_buffer: Option<BufferSnapshot>,
     pub commit_count: usize,
 }

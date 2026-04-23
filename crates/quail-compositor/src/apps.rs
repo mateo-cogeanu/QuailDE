@@ -15,6 +15,7 @@ pub struct DesktopApp {
     pub command: String,
     pub args: Vec<String>,
     pub category: AppCategory,
+    pub icon_name: String,
 }
 
 /// AppCategory lets the shell give a few familiar placements to common apps.
@@ -166,6 +167,7 @@ fn discover_path_fallbacks() -> Vec<DesktopApp> {
                     command: command.to_string(),
                     args: args.into_iter().map(ToString::to_string).collect(),
                     category,
+                    icon_name: command.to_string(),
                 });
             }
         }
@@ -209,6 +211,7 @@ fn parse_desktop_entry(path: &Path) -> Option<DesktopApp> {
     let mut name = None;
     let mut exec = None;
     let mut categories = None;
+    let mut icon_name = None;
     let mut no_display = false;
     let mut terminal = false;
     let mut in_desktop_entry = false;
@@ -230,6 +233,7 @@ fn parse_desktop_entry(path: &Path) -> Option<DesktopApp> {
             "Name" => name = Some(value.trim().to_string()),
             "Exec" => exec = Some(value.trim().to_string()),
             "Categories" => categories = Some(value.trim().to_string()),
+            "Icon" => icon_name = Some(value.trim().to_string()),
             "NoDisplay" => no_display = value.trim().eq_ignore_ascii_case("true"),
             "Terminal" => terminal = value.trim().eq_ignore_ascii_case("true"),
             _ => {}
@@ -247,12 +251,14 @@ fn parse_desktop_entry(path: &Path) -> Option<DesktopApp> {
     if find_in_path(&command).is_none() {
         return None;
     }
+    let fallback_icon_name = name.to_ascii_lowercase();
 
     Some(DesktopApp {
         name,
         command,
         args,
         category,
+        icon_name: icon_name.unwrap_or(fallback_icon_name),
     })
 }
 

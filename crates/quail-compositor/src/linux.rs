@@ -490,25 +490,34 @@ mod platform {
             }
             (EV_KEY, BTN_LEFT, 1) => {
                 state.pointer_buttons_pressed = 1;
-                if let Some(index) = state.dock_app_at_cursor() {
+                if let Some(index) = state
+                    .panel_app_at_cursor()
+                    .or_else(|| state.launcher_app_at_cursor())
+                {
                     state.pending_launch = Some(index);
                 }
                 state.begin_window_drag();
+                state.route_pointer_button(true);
             }
             (EV_KEY, BTN_LEFT, 0) => {
                 state.pointer_buttons_pressed = 0;
                 state.end_pointer_press();
+                state.route_pointer_button(false);
             }
             (EV_KEY, KEY_LEFT, 1) => state.move_cursor_relative(-24.0, 0.0),
             (EV_KEY, KEY_RIGHT, 1) => state.move_cursor_relative(24.0, 0.0),
             (EV_KEY, KEY_UP, 1) => state.move_cursor_relative(0.0, -24.0),
             (EV_KEY, KEY_DOWN, 1) => state.move_cursor_relative(0.0, 24.0),
             (EV_KEY, KEY_ESC, 1) => state.quit_requested = true,
+            (EV_KEY, code, value) if code < BTN_LEFT => {
+                state.route_keyboard_key(u32::from(code), value != 0)
+            }
             _ => {}
         }
         state.clamp_cursor();
         state.update_drag();
         state.update_input_focus();
+        state.route_pointer_motion();
     }
 
     fn update_axis_range(min: &mut Option<i32>, max: &mut Option<i32>, value: i32) {

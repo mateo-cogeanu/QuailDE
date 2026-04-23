@@ -1,9 +1,11 @@
 pub mod apps;
 pub mod backend;
 pub mod drm_output;
+pub mod launcher;
 pub mod linux;
 pub mod output;
 pub mod protocol;
+pub mod render;
 pub mod runtime;
 pub mod scene;
 pub mod shell;

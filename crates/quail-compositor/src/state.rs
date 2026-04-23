@@ -375,22 +375,18 @@ impl CompositorState {
     /// dock_app_at_cursor resolves the dock slot under the cursor to a
     /// discovered application index so clicks can launch installed apps.
     pub fn dock_app_at_cursor(&self) -> Option<usize> {
-        let dock_width = self.composed_width.max(0).min(340) as usize;
-        let dock_height = 84_usize;
-        let width = self.composed_width.max(0) as usize;
         let height = self.composed_height.max(0) as usize;
-        let dock_x = (width.saturating_sub(dock_width)) / 2;
-        let dock_y = height.saturating_sub(dock_height + 18);
+        let dock_y = height.saturating_sub(54);
         let cursor_x = self.cursor_x.max(0) as usize;
         let cursor_y = self.cursor_y.max(0) as usize;
 
-        if cursor_y < dock_y + 16 || cursor_y >= dock_y + 60 {
+        if cursor_y < dock_y + 9 || cursor_y >= dock_y + 45 {
             return None;
         }
 
-        (0..self.installed_apps.len().min(5)).find(|index| {
-            let icon_x = dock_x + 24 + index * 62;
-            cursor_x >= icon_x && cursor_x < icon_x + 44
+        (0..self.installed_apps.len().min(6)).find(|index| {
+            let icon_x = 18 + index * 52;
+            cursor_x >= icon_x && cursor_x < icon_x + 36
         })
     }
 }

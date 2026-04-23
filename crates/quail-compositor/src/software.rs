@@ -27,10 +27,8 @@ pub fn compose_scene(state: &mut CompositorState) -> SoftwareFrame {
     let mut painted_surfaces = 0;
 
     paint_background(&mut pixels, width, height);
-    paint_panel(&mut pixels, width, height);
-    paint_status_area(&mut pixels, width, height);
-    paint_system_dock(&mut pixels, width, height, state);
-    paint_desktop_icons(&mut pixels, width, height);
+    paint_launcher_surface(&mut pixels, width, height, state);
+    paint_bottom_panel(&mut pixels, width, height, state);
 
     let mut ordered_surfaces = state.scene.surfaces.values().collect::<Vec<_>>();
     ordered_surfaces.sort_by_key(|surface| {
@@ -155,203 +153,469 @@ fn normalize_pixel(pixel: u32, format_name: &str) -> u32 {
 fn paint_background(frame: &mut [u32], width: usize, height: usize) {
     for y in 0..height {
         for x in 0..width {
-            let blue = 0x70_u32.saturating_add((y as u32).saturating_mul(0x4A) / height as u32);
-            let green = 0x63_u32.saturating_add((x as u32).saturating_mul(0x42) / width as u32);
-            let red = 0x14_u32.saturating_add((x as u32).saturating_mul(0x28) / width as u32);
+            let blue = 0x18_u32.saturating_add((y as u32).saturating_mul(0x28) / height as u32);
+            let green = 0x14_u32.saturating_add((x as u32).saturating_mul(0x14) / width as u32);
+            let red = 0x0F_u32.saturating_add((x as u32).saturating_mul(0x0E) / width as u32);
             frame[y * width + x] = 0xFF00_0000 | (red << 16) | (green << 8) | blue;
         }
     }
 
-    let orb_radius = (width.min(height) / 7).max(40) as i32;
-    paint_glow(
+    paint_cloud(
         frame,
         width,
         height,
-        width as i32 - orb_radius * 2,
-        orb_radius * 2,
-        orb_radius,
+        (width as i32) / 3,
+        (height as i32) / 3,
+        (width.min(height) as i32) / 4,
+        0x441A233A,
+    );
+    paint_cloud(
+        frame,
+        width,
+        height,
+        (width as i32 * 3) / 4,
+        (height as i32 * 2) / 5,
+        (width.min(height) as i32) / 5,
+        0x332D1C3B,
+    );
+    paint_cloud(
+        frame,
+        width,
+        height,
+        (width as i32 * 4) / 5,
+        (height as i32 * 3) / 4,
+        (width.min(height) as i32) / 4,
+        0x3B261C38,
     );
     paint_glow(
         frame,
         width,
         height,
-        orb_radius * 2,
-        height as i32 - orb_radius * 2,
-        orb_radius,
+        width as i32 - 180,
+        120,
+        170,
+        0x22E8A15B,
     );
-    paint_wallpaper_grid(frame, width, height);
+    paint_glow(frame, width, height, 220, 150, 220, 0x1A59B6FF);
+    paint_glow(
+        frame,
+        width,
+        height,
+        width as i32 / 2,
+        height as i32 - 100,
+        260,
+        0x1C8A5BFF,
+    );
+    paint_light_streak(
+        frame,
+        width,
+        height,
+        width as i32 - 440,
+        140,
+        320,
+        0x15FFFFFF,
+    );
+    paint_light_streak(
+        frame,
+        width,
+        height,
+        width as i32 - 620,
+        height as i32 - 240,
+        280,
+        0x0EFFFFFF,
+    );
 }
 
-fn paint_panel(frame: &mut [u32], width: usize, height: usize) {
-    let panel_height = height.min(54);
+fn paint_launcher_surface(frame: &mut [u32], width: usize, height: usize, state: &CompositorState) {
+    let panel_width = width.min(780);
+    let panel_height = height.min(620);
+    let panel_x = 18;
+    let panel_y = height.saturating_sub(panel_height + 78);
+
     fill_rounded_rect(
         frame,
         width,
         height,
-        14,
-        10,
-        width.saturating_sub(28),
+        panel_x,
+        panel_y,
+        panel_width,
         panel_height,
-        18,
-        0xD9182333,
+        20,
+        0xE5161A21,
     );
-    fill_rect(frame, width, height, 34, 26, 104, 4, 0x66D6E7F5);
-    fill_rounded_rect(frame, width, height, 26, 18, 122, 24, 12, 0x332B90D9);
-    fill_rounded_rect(frame, width, height, 34, 23, 26, 14, 7, 0xFFF5F8FD);
-    fill_rounded_rect(frame, width, height, 72, 23, 58, 14, 7, 0xFFD5E6F9);
-}
+    fill_rounded_rect(
+        frame,
+        width,
+        height,
+        panel_x + 1,
+        panel_y + 1,
+        panel_width.saturating_sub(2),
+        58,
+        20,
+        0xF01C222C,
+    );
+    fill_rounded_rect(
+        frame,
+        width,
+        height,
+        panel_x + 278,
+        panel_y + 14,
+        panel_width.saturating_sub(334),
+        34,
+        11,
+        0xFF262D37,
+    );
+    fill_rounded_rect(
+        frame,
+        width,
+        height,
+        panel_x + 28,
+        panel_y + 16,
+        26,
+        26,
+        13,
+        0xFF293545,
+    );
+    fill_rounded_rect(
+        frame,
+        width,
+        height,
+        panel_x + 60,
+        panel_y + 23,
+        100,
+        10,
+        5,
+        0xFFD7DFEA,
+    );
+    fill_rounded_rect(
+        frame,
+        width,
+        height,
+        panel_x + 302,
+        panel_y + 26,
+        134,
+        8,
+        4,
+        0x889AA8B8,
+    );
+    fill_rounded_rect(
+        frame,
+        width,
+        height,
+        panel_x + panel_width - 62,
+        panel_y + 20,
+        18,
+        18,
+        9,
+        0xFF2A3340,
+    );
+    fill_rounded_rect(
+        frame,
+        width,
+        height,
+        panel_x + panel_width - 34,
+        panel_y + 20,
+        18,
+        18,
+        9,
+        0xFF2A3340,
+    );
 
-fn paint_status_area(frame: &mut [u32], width: usize, height: usize) {
-    let right = width.saturating_sub(18);
-    fill_rounded_rect(
+    let sidebar_width = 256;
+    fill_rect(
         frame,
         width,
         height,
-        right.saturating_sub(172),
-        10,
-        154,
-        32,
-        12,
-        0x8C304157,
+        panel_x + sidebar_width,
+        panel_y + 60,
+        1,
+        panel_height.saturating_sub(118),
+        0xFF2A313C,
     );
     fill_rounded_rect(
         frame,
         width,
         height,
-        right.saturating_sub(160),
-        21,
-        18,
-        10,
-        5,
-        0xFFF2C14E,
-    );
-    fill_rounded_rect(
-        frame,
-        width,
-        height,
-        right.saturating_sub(132),
-        21,
-        18,
-        10,
-        5,
-        0xFF67D5B5,
-    );
-    fill_rounded_rect(
-        frame,
-        width,
-        height,
-        right.saturating_sub(104),
-        21,
-        18,
-        10,
-        5,
-        0xFFF26B6B,
-    );
-    fill_rounded_rect(
-        frame,
-        width,
-        height,
-        right.saturating_sub(70),
-        18,
+        panel_x + 12,
+        panel_y + 74,
+        sidebar_width - 24,
         44,
-        14,
-        7,
-        0xFFDCE8F5,
+        10,
+        0xFF213040,
     );
-}
 
-fn paint_system_dock(frame: &mut [u32], width: usize, height: usize, state: &CompositorState) {
-    let dock_width = width.min(340);
-    let dock_height = 84;
-    let dock_x = (width.saturating_sub(dock_width)) / 2;
-    let dock_y = height.saturating_sub(dock_height + 18);
+    let sidebar_items = [
+        ("Favorites", true),
+        ("All Applications", false),
+        ("Development", false),
+        ("Graphics", false),
+        ("Internet", false),
+        ("Multimedia", false),
+        ("Office", false),
+        ("Settings", false),
+    ];
+    for (index, (_label, selected)) in sidebar_items.iter().enumerate() {
+        let item_y = panel_y + 74 + index * 52;
+        if *selected {
+            fill_rounded_rect(
+                frame,
+                width,
+                height,
+                panel_x + 12,
+                item_y,
+                sidebar_width - 24,
+                44,
+                10,
+                0xFF20384D,
+            );
+        }
+        fill_rounded_rect(
+            frame,
+            width,
+            height,
+            panel_x + 24,
+            item_y + 12,
+            18,
+            18,
+            7,
+            0xFF4C79A6,
+        );
+        let bar_width = if index == 1 { 142 } else { 110 };
+        fill_rounded_rect(
+            frame,
+            width,
+            height,
+            panel_x + 54,
+            item_y + 16,
+            bar_width,
+            9,
+            4,
+            0xFFC8D2DE,
+        );
+    }
 
     fill_rounded_rect(
         frame,
         width,
         height,
-        dock_x,
-        dock_y,
-        dock_width,
-        dock_height,
-        24,
-        0xC61A2334,
+        panel_x + 18,
+        panel_y + panel_height - 54,
+        122,
+        36,
+        10,
+        0xFF1E2430,
+    );
+    fill_rounded_rect(
+        frame,
+        width,
+        height,
+        panel_x + 148,
+        panel_y + panel_height - 54,
+        96,
+        36,
+        10,
+        0xFF1A202B,
+    );
+    fill_rounded_rect(
+        frame,
+        width,
+        height,
+        panel_x + panel_width - 300,
+        panel_y + panel_height - 54,
+        86,
+        36,
+        10,
+        0xFF1A202B,
+    );
+    fill_rounded_rect(
+        frame,
+        width,
+        height,
+        panel_x + panel_width - 204,
+        panel_y + panel_height - 54,
+        86,
+        36,
+        10,
+        0xFF1A202B,
+    );
+    fill_rounded_rect(
+        frame,
+        width,
+        height,
+        panel_x + panel_width - 108,
+        panel_y + panel_height - 54,
+        90,
+        36,
+        10,
+        0xFF251E22,
     );
 
-    for (index, app) in state.installed_apps.iter().take(5).enumerate() {
-        let icon_x = dock_x + 24 + index * 62;
+    for (index, app) in state.installed_apps.iter().take(8).enumerate() {
+        let col = index % 4;
+        let row = index / 4;
+        let tile_x = panel_x + sidebar_width + 28 + col * 116;
+        let tile_y = panel_y + 86 + row * 128;
         let color = match app.category {
-            AppCategory::Terminal => 0xFF4F8EF7,
-            AppCategory::Browser => 0xFFFFB347,
-            AppCategory::Files => 0xFF7CD992,
-            AppCategory::Editor => 0xFFF279A2,
-            AppCategory::Utility => 0xFFC2D3E8,
+            AppCategory::Terminal => 0xFF4C6FFF,
+            AppCategory::Browser => 0xFFFFA64D,
+            AppCategory::Files => 0xFF4CBF8A,
+            AppCategory::Editor => 0xFFB36DFF,
+            AppCategory::Utility => 0xFF8FA3BA,
         };
-        fill_rounded_rect(frame, width, height, icon_x, dock_y + 16, 44, 44, 14, color);
         fill_rounded_rect(
             frame,
             width,
             height,
-            icon_x + 10,
-            dock_y + 26,
-            24,
-            24,
-            8,
-            0xFFF6FAFF,
+            tile_x,
+            tile_y,
+            96,
+            102,
+            14,
+            if index == 0 { 0xFF24394E } else { 0xFF161B24 },
         );
-        let label_width = app.name.len().min(6).saturating_mul(5).max(18);
         fill_rounded_rect(
             frame,
             width,
             height,
-            icon_x + 6,
-            dock_y + 66,
+            tile_x + 22,
+            tile_y + 14,
+            50,
+            50,
+            16,
+            color,
+        );
+        fill_rounded_rect(
+            frame,
+            width,
+            height,
+            tile_x + 34,
+            tile_y + 26,
+            26,
+            26,
+            9,
+            0xFFF7FAFD,
+        );
+        let label_width = app.name.len().min(10).saturating_mul(6).max(46);
+        fill_rounded_rect(
+            frame,
+            width,
+            height,
+            tile_x + 12,
+            tile_y + 74,
             label_width,
+            8,
             4,
-            2,
-            0xCCD9E7F6,
+            0xFFD8E0EA,
+        );
+        let label_width_secondary = app.command.len().min(9).saturating_mul(5).max(28);
+        fill_rounded_rect(
+            frame,
+            width,
+            height,
+            tile_x + 12,
+            tile_y + 88,
+            label_width_secondary,
+            6,
+            3,
+            0x667E8E9F,
         );
     }
 }
 
-fn paint_desktop_icons(frame: &mut [u32], width: usize, height: usize) {
-    for index in 0..3 {
-        let icon_y = 82 + index * 96;
-        fill_rounded_rect(frame, width, height, 22, icon_y - 6, 72, 82, 20, 0x44202B3E);
-        fill_rounded_rect(frame, width, height, 30, icon_y, 52, 52, 18, 0xAA223248);
+fn paint_bottom_panel(frame: &mut [u32], width: usize, height: usize, state: &CompositorState) {
+    let panel_height = 54;
+    let panel_y = height.saturating_sub(panel_height);
+    fill_rect(
+        frame,
+        width,
+        height,
+        0,
+        panel_y,
+        width,
+        panel_height,
+        0xEE131821,
+    );
+    fill_rect(frame, width, height, 0, panel_y, width, 1, 0xFF2B3240);
+
+    for (index, app) in state.installed_apps.iter().take(6).enumerate() {
+        let icon_x = 18 + index * 52;
+        let color = match app.category {
+            AppCategory::Terminal => 0xFF4C6FFF,
+            AppCategory::Browser => 0xFFFFA64D,
+            AppCategory::Files => 0xFF4CBF8A,
+            AppCategory::Editor => 0xFFB36DFF,
+            AppCategory::Utility => 0xFF8FA3BA,
+        };
         fill_rounded_rect(
             frame,
             width,
             height,
-            40,
-            icon_y + 12,
-            32,
-            32,
+            icon_x,
+            panel_y + 9,
+            36,
+            36,
             10,
-            0xFFE9F2FB,
+            0xFF202631,
         );
-        fill_rounded_rect(frame, width, height, 28, icon_y + 66, 58, 8, 4, 0xAAE6EEF8);
+        fill_rounded_rect(
+            frame,
+            width,
+            height,
+            icon_x + 7,
+            panel_y + 16,
+            22,
+            22,
+            7,
+            color,
+        );
     }
+
+    let mut indicator_x = width.saturating_sub(250);
+    for _ in 0..8 {
+        fill_rounded_rect(
+            frame,
+            width,
+            height,
+            indicator_x,
+            panel_y + 18,
+            16,
+            16,
+            5,
+            0xFF697789,
+        );
+        indicator_x += 26;
+    }
+    fill_rounded_rect(
+        frame,
+        width,
+        height,
+        width.saturating_sub(80),
+        panel_y + 16,
+        54,
+        20,
+        7,
+        0xFFD8E0EA,
+    );
 }
 
 fn paint_cursor(frame: &mut [u32], width: usize, height: usize, cursor_x: i32, cursor_y: i32) {
     let cursor_pattern = [
-        "..SXX...........",
-        ".SSXXX..........",
-        ".SXXOOX.........",
-        ".SXOOOOX........",
-        ".SXOOOOOX.......",
-        ".SXOOOOOOX......",
-        ".SXOOOOOOOX.....",
-        ".SXOOOOOOOOX....",
-        ".SXOOOOOOX......",
-        ".SXOOOOXOX......",
-        ".SXOOX..XOX.....",
-        ".SXXX...XOX.....",
-        "..SX.....XOX....",
-        ".........XOX....",
-        ".........XOX....",
-        "..........XX....",
+        "SS................",
+        "SXX...............",
+        "SXXX..............",
+        "SXOOX.............",
+        "SXOOOX............",
+        "SXOOOOX...........",
+        "SXOOOOOX..........",
+        "SXOOOOOOX.........",
+        "SXOOOOOOOX........",
+        "SXOOOOXOOX........",
+        "SXOOOX.XOOX.......",
+        "SXOOX..XOOX.......",
+        "SXXX....XOOX......",
+        "SX.......XOOX.....",
+        ".........XOOX.....",
+        "..........XX......",
     ];
 
     for (row_index, row) in cursor_pattern.iter().enumerate() {
@@ -367,9 +631,9 @@ fn paint_cursor(frame: &mut [u32], width: usize, height: usize, cursor_x: i32, c
                 continue;
             }
             match cell {
-                'S' => blend_pixel(&mut frame[y * width + x], 0x66000000),
-                'X' => frame[y * width + x] = 0xFF00_0000,
-                'O' => frame[y * width + x] = 0xFFF5_F7_FA,
+                'S' => blend_pixel(&mut frame[y * width + x], 0x44000000),
+                'X' => frame[y * width + x] = 0xFF0E1218,
+                'O' => frame[y * width + x] = 0xFFF7FAFD,
                 _ => {}
             }
         }
@@ -394,8 +658,8 @@ fn paint_window_frame(
     let window_height = usize::try_from(buffer.height.max(0))
         .unwrap_or(0)
         .saturating_add(40);
-    let body_color = if focused { 0xFFF5F7FB } else { 0xFFE6EBF1 };
-    let title_color = if focused { 0xFF2D5C95 } else { 0xFF52647E };
+    let body_color = if focused { 0xFF131922 } else { 0xFF171D27 };
+    let title_color = if focused { 0xFF1F2D40 } else { 0xFF202733 };
     fill_rounded_rect(
         frame,
         width,
@@ -405,7 +669,7 @@ fn paint_window_frame(
         window_width,
         window_height,
         16,
-        0x88202A38,
+        0x6611161D,
     );
     fill_rounded_rect(
         frame,
@@ -429,9 +693,9 @@ fn paint_window_frame(
         14,
         title_color,
     );
-    fill_rounded_rect(frame, width, height, x + 16, y + 14, 12, 12, 6, 0xFFFF6B6B);
-    fill_rounded_rect(frame, width, height, x + 34, y + 14, 12, 12, 6, 0xFFF2C14E);
-    fill_rounded_rect(frame, width, height, x + 52, y + 14, 12, 12, 6, 0xFF67D5B5);
+    fill_rounded_rect(frame, width, height, x + 16, y + 14, 12, 12, 6, 0xFFDC5B64);
+    fill_rounded_rect(frame, width, height, x + 34, y + 14, 12, 12, 6, 0xFFD6A448);
+    fill_rounded_rect(frame, width, height, x + 52, y + 14, 12, 12, 6, 0xFF5FBC8D);
     let title_width = surface.window_title.len().min(24).saturating_mul(7).max(42);
     fill_rounded_rect(
         frame,
@@ -442,7 +706,7 @@ fn paint_window_frame(
         title_width,
         10,
         5,
-        if focused { 0xFFDDEBFF } else { 0xFFD2DCE8 },
+        if focused { 0xFFDFE6F1 } else { 0xAAB5C0CD },
     );
 }
 
@@ -543,20 +807,6 @@ fn blend_pixel(destination: &mut u32, source: u32) {
     *destination = 0xFF00_0000 | (red << 16) | (green << 8) | blue;
 }
 
-fn paint_wallpaper_grid(frame: &mut [u32], width: usize, height: usize) {
-    let step = 48;
-    for y in (0..height).step_by(step) {
-        for x in 0..width {
-            blend_pixel(&mut frame[y * width + x], 0x102A405A);
-        }
-    }
-    for x in (0..width).step_by(step) {
-        for y in 0..height {
-            blend_pixel(&mut frame[y * width + x], 0x0E2A405A);
-        }
-    }
-}
-
 fn paint_glow(
     frame: &mut [u32],
     frame_width: usize,
@@ -564,6 +814,7 @@ fn paint_glow(
     center_x: i32,
     center_y: i32,
     radius: i32,
+    color: u32,
 ) {
     let min_x = (center_x - radius).max(0) as usize;
     let max_x = (center_x + radius).max(0) as usize;
@@ -580,11 +831,78 @@ fn paint_glow(
                 continue;
             }
 
-            let intensity = ((radius_squared - distance) * 90 / radius_squared.max(1)) as u32;
-            let blue = 0x90_u32.saturating_add(intensity / 2).min(0xFF);
-            let green = 0x7A_u32.saturating_add(intensity / 3).min(0xFF);
-            let red = 0x38_u32.saturating_add(intensity / 5).min(0xFF);
-            frame[y * frame_width + x] = 0xFF00_0000 | (red << 16) | (green << 8) | blue;
+            let alpha = ((radius_squared - distance) * ((color >> 24) & 0xFF) as i32
+                / radius_squared.max(1)) as u32;
+            let source = (alpha << 24) | (color & 0x00FF_FFFF);
+            blend_pixel(&mut frame[y * frame_width + x], source);
+        }
+    }
+}
+
+fn paint_cloud(
+    frame: &mut [u32],
+    width: usize,
+    height: usize,
+    center_x: i32,
+    center_y: i32,
+    radius: i32,
+    color: u32,
+) {
+    paint_glow(
+        frame,
+        width,
+        height,
+        center_x - radius / 2,
+        center_y,
+        radius,
+        color,
+    );
+    paint_glow(
+        frame,
+        width,
+        height,
+        center_x + radius / 3,
+        center_y - radius / 5,
+        radius,
+        color,
+    );
+    paint_glow(
+        frame,
+        width,
+        height,
+        center_x,
+        center_y + radius / 4,
+        radius,
+        color,
+    );
+}
+
+fn paint_light_streak(
+    frame: &mut [u32],
+    frame_width: usize,
+    frame_height: usize,
+    start_x: i32,
+    start_y: i32,
+    length: i32,
+    color: u32,
+) {
+    for step in 0..length.max(0) {
+        let x = start_x + step;
+        let y = start_y + step / 3;
+        if x < 0 || y < 0 {
+            continue;
+        }
+        let x = x as usize;
+        let y = y as usize;
+        if x >= frame_width || y >= frame_height {
+            continue;
+        }
+        for spread in 0..4 {
+            let draw_y = y.saturating_add(spread);
+            if draw_y >= frame_height {
+                continue;
+            }
+            blend_pixel(&mut frame[draw_y * frame_width + x], color);
         }
     }
 }

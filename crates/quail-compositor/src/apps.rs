@@ -1,6 +1,7 @@
-use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::env;
 use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -29,18 +30,24 @@ pub enum AppCategory {
 /// discover_system_apps combines desktop-entry discovery with PATH fallbacks so
 /// QuailDE can launch real installed apps instead of a hard-coded shortlist.
 pub fn discover_system_apps() -> Vec<DesktopApp> {
-    let mut discovered = BTreeMap::<AppCategory, DesktopApp>::new();
+    let mut discovered = Vec::<DesktopApp>::new();
+    let mut seen = BTreeSet::<(String, String)>::new();
 
     for app in discover_desktop_entries() {
-        discovered.entry(app.category).or_insert(app);
+        let key = (app.name.clone(), app.command.clone());
+        if seen.insert(key) {
+            discovered.push(app);
+        }
     }
     for app in discover_path_fallbacks() {
-        discovered.entry(app.category).or_insert(app);
+        let key = (app.name.clone(), app.command.clone());
+        if seen.insert(key) {
+            discovered.push(app);
+        }
     }
 
-    let mut apps = discovered.into_values().collect::<Vec<_>>();
-    apps.sort_by_key(|app| category_rank(app.category));
-    apps
+    discovered.sort_by_key(|app| (category_rank(app.category), app.name.to_ascii_lowercase()));
+    discovered
 }
 
 /// spawn_app launches a discovered system app with the compositor's Wayland
@@ -52,9 +59,12 @@ pub fn spawn_app(app: &DesktopApp, wayland_display: &str, xdg_runtime_dir: &Path
     command.env("XDG_RUNTIME_DIR", xdg_runtime_dir);
     // These environment variables nudge common toolkits toward Wayland-native
     // backends so QuailDE can use installed apps without relying on X11 first.
+    command.env("XDG_CURRENT_DESKTOP", "QuailDE");
+    command.env("DESKTOP_SESSION", "QuailDE");
     command.env("XDG_SESSION_TYPE", "wayland");
     command.env("GDK_BACKEND", "wayland");
     command.env("QT_QPA_PLATFORM", "wayland");
+    command.env("CLUTTER_BACKEND", "wayland");
     command.env("SDL_VIDEODRIVER", "wayland");
     command.env("MOZ_ENABLE_WAYLAND", "1");
     command
@@ -64,7 +74,7 @@ pub fn spawn_app(app: &DesktopApp, wayland_display: &str, xdg_runtime_dir: &Path
 }
 
 fn discover_desktop_entries() -> Vec<DesktopApp> {
-    let mut entries = BTreeMap::<AppCategory, DesktopApp>::new();
+    let mut entries = Vec::<DesktopApp>::new();
     for directory in desktop_entry_dirs() {
         let Ok(iter) = fs::read_dir(&directory) else {
             continue;
@@ -77,13 +87,12 @@ fn discover_desktop_entries() -> Vec<DesktopApp> {
             let Some(app) = parse_desktop_entry(&path) else {
                 continue;
             };
-            entries.entry(app.category).or_insert(app);
+            entries.push(app);
         }
     }
 
-    let mut apps = entries.into_values().collect::<Vec<_>>();
-    apps.sort_by_key(|app| category_rank(app.category));
-    apps
+    entries.sort_by_key(|app| (category_rank(app.category), app.name.to_ascii_lowercase()));
+    entries
 }
 
 fn discover_path_fallbacks() -> Vec<DesktopApp> {
@@ -150,16 +159,15 @@ fn discover_path_fallbacks() -> Vec<DesktopApp> {
 
     let mut apps = Vec::new();
     for (label, category, binaries) in candidates {
-        if let Some((command, args)) = binaries
-            .into_iter()
-            .find(|(binary, _)| find_in_path(binary).is_some())
-        {
-            apps.push(DesktopApp {
-                name: label.to_string(),
-                command: command.to_string(),
-                args: args.into_iter().map(ToString::to_string).collect(),
-                category,
-            });
+        for (command, args) in binaries {
+            if find_in_path(command).is_some() {
+                apps.push(DesktopApp {
+                    name: label.to_string(),
+                    command: command.to_string(),
+                    args: args.into_iter().map(ToString::to_string).collect(),
+                    category,
+                });
+            }
         }
     }
 
@@ -179,6 +187,10 @@ fn find_in_path(binary: &str) -> Option<PathBuf> {
 
 fn is_executable(path: &Path) -> bool {
     path.is_file()
+        && path
+            .metadata()
+            .ok()
+            .is_some_and(|metadata| metadata.permissions().mode() & 0o111 != 0)
 }
 
 fn desktop_entry_dirs() -> Vec<PathBuf> {

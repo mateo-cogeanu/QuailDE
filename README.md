@@ -95,7 +95,7 @@ QuailDE now also advertises `xdg_wm_base` and can initialize `xdg_surface` and `
 
 QuailDE now also advertises `wl_seat` with pointer and keyboard capabilities. The compositor also has a first raw Linux live path: it prefers DRM/KMS on `/dev/dri/card0`, falls back to `/dev/fb0` when DRM setup fails, and reads mouse or keyboard events from `/dev/input/event*`.
 
-The software shell now paints a visible desktop, manages real `xdg_toplevel` client surfaces with simple server-side decorations, focus tracking, and drag-to-move behavior, and can discover installed system apps so the dock and startup session can launch a real terminal and other available programs.
+The software shell now paints a visible desktop, manages real `xdg_toplevel` client surfaces with simple server-side decorations, focus tracking, and drag-to-move behavior, and can discover installed system apps from desktop entries so the dock and startup session can launch a real terminal and other available programs. The Linux pointer path also now prefers kernel-reported absolute-axis ranges, which makes VM mouse input feel much closer to a real desktop pointer.
 
 On a Linux VM with no desktop environment, you can now try the first visible QuailDE session from a text console:
 

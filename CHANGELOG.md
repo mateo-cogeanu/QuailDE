@@ -29,3 +29,4 @@
 - Fixed two Linux-only compile issues in the DRM test-pattern path by typing the startup pixels explicitly and computing the dumb-buffer pitch before taking the mutable map borrow.
 - Removed fake placeholder windows and turned the raw compositor into a basic real window manager for `xdg_toplevel` surfaces, with focus tracking, server-side decorations, and drag-to-move behavior driven by the mouse.
 - Smoothed VM mouse handling by scaling absolute-pointer devices from their observed input range instead of a hard-coded constant, and added a small system-app catalog so QuailDE can auto-launch a real terminal and open installed apps from the dock.
+- Replaced the narrow binary-only launcher with desktop-entry discovery plus PATH fallbacks, and switched the Linux absolute-pointer path to use kernel-reported evdev axis bounds when available for much less blocky VM mouse movement.

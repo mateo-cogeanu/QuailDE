@@ -19,6 +19,7 @@ mod platform {
     const KDSETMODE: libc::c_ulong = 0x4B3A;
     const KD_TEXT: libc::c_ulong = 0x00;
     const KD_GRAPHICS: libc::c_ulong = 0x01;
+    const EVIOCGABS_BASE: libc::c_ulong = 0x8018_4540;
 
     const EV_KEY: u16 = 0x01;
     const EV_REL: u16 = 0x02;
@@ -103,6 +104,17 @@ mod platform {
         type_: u16,
         code: u16,
         value: i32,
+    }
+
+    #[repr(C)]
+    #[derive(Clone, Copy, Debug, Default)]
+    struct InputAbsInfo {
+        value: i32,
+        minimum: i32,
+        maximum: i32,
+        fuzz: i32,
+        flat: i32,
+        resolution: i32,
     }
 
     /// LinuxPlatform owns the first visible raw Linux backend for QuailDE:
@@ -404,13 +416,15 @@ mod platform {
                 .custom_flags(libc::O_NONBLOCK)
                 .open(&path)
                 .with_context(|| format!("failed to open input device {}", path.display()))?;
+            let (abs_x_min, abs_x_max) = query_abs_axis_range(&file, ABS_X).unwrap_or((None, None));
+            let (abs_y_min, abs_y_max) = query_abs_axis_range(&file, ABS_Y).unwrap_or((None, None));
             devices.push(InputDevice {
                 _path: path,
                 file,
-                abs_x_min: None,
-                abs_x_max: None,
-                abs_y_min: None,
-                abs_y_max: None,
+                abs_x_min,
+                abs_x_max,
+                abs_y_min,
+                abs_y_max,
             });
         }
 
@@ -494,6 +508,19 @@ mod platform {
     fn update_axis_range(min: &mut Option<i32>, max: &mut Option<i32>, value: i32) {
         *min = Some(min.map_or(value, |current| current.min(value)));
         *max = Some(max.map_or(value, |current| current.max(value)));
+    }
+
+    fn query_abs_axis_range(file: &File, axis: u16) -> Result<(Option<i32>, Option<i32>)> {
+        let mut info = InputAbsInfo::default();
+        let request = EVIOCGABS_BASE + libc::c_ulong::from(axis);
+        // evdev exposes calibrated absolute-axis bounds through EVIOCGABS, so
+        // QuailDE prefers those kernel-provided values over learning a rough
+        // range from motion samples after startup.
+        let status = unsafe { libc::ioctl(file.as_raw_fd(), request, &mut info) };
+        if status < 0 {
+            return Ok((None, None));
+        }
+        Ok((Some(info.minimum), Some(info.maximum)))
     }
 
     fn map_absolute_axis(

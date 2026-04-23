@@ -5,13 +5,15 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 use wayland_protocols::xdg::shell::server::xdg_wm_base::XdgWmBase;
-use wayland_server::protocol::{wl_compositor::WlCompositor, wl_seat::WlSeat, wl_shm::WlShm};
+use wayland_server::protocol::{
+    wl_compositor::WlCompositor, wl_output::WlOutput, wl_seat::WlSeat, wl_shm::WlShm,
+};
 use wayland_server::{Display, ListeningSocket};
 
 use crate::apps::{AppCategory, discover_system_apps, spawn_app};
 use crate::backend::{BackendStatus, RuntimeBackend};
 use crate::linux::create_linux_platform;
-use crate::protocol::{CompositorGlobal, SeatGlobal, ShmGlobal, XdgWmBaseGlobal};
+use crate::protocol::{CompositorGlobal, OutputGlobal, SeatGlobal, ShmGlobal, XdgWmBaseGlobal};
 use crate::software::{compose_scene, write_ppm};
 use crate::state::CompositorState;
 
@@ -59,7 +61,10 @@ pub fn run_runtime(options: RuntimeOptions) -> Result<RuntimeReport> {
     display
         .handle()
         .create_global::<CompositorState, WlSeat, _>(9, SeatGlobal);
-    state.advertised_globals = 4;
+    display
+        .handle()
+        .create_global::<CompositorState, WlOutput, _>(4, OutputGlobal);
+    state.advertised_globals = 5;
     let socket = ListeningSocket::bind_auto(&options.socket_prefix, 1..=32)
         .context("failed to bind a Wayland listening socket")?;
     let socket_name = socket
@@ -77,7 +82,7 @@ pub fn run_runtime(options: RuntimeOptions) -> Result<RuntimeReport> {
         state.last_frame_painted_surfaces = frame.painted_surfaces;
     }
 
-    launch_startup_apps(&mut state)?;
+    launch_startup_apps(&mut state);
 
     if options.once {
         return Ok(RuntimeReport { state });
@@ -106,7 +111,7 @@ pub fn run_runtime(options: RuntimeOptions) -> Result<RuntimeReport> {
         if let Some(platform) = linux_platform.as_mut() {
             platform.tick(&mut state)?;
         }
-        launch_pending_app(&mut state)?;
+        launch_pending_app(&mut state);
         display
             .flush_clients()
             .context("failed to flush Wayland client buffers")?;
@@ -119,37 +124,47 @@ pub fn run_runtime(options: RuntimeOptions) -> Result<RuntimeReport> {
     Ok(RuntimeReport { state })
 }
 
-fn launch_startup_apps(state: &mut CompositorState) -> Result<()> {
+fn launch_startup_apps(state: &mut CompositorState) {
     let Some(runtime_dir) = std::env::var_os("XDG_RUNTIME_DIR") else {
-        return Ok(());
+        return;
     };
     let runtime_dir = PathBuf::from(runtime_dir);
-    if let Some(terminal) = state
+    let Some(app) = state
         .installed_apps
         .iter()
         .find(|app| app.category == AppCategory::Terminal)
+        .or_else(|| state.installed_apps.first())
         .cloned()
-    {
-        spawn_app(&terminal, &state.listening_socket, &runtime_dir)?;
-        state.startup_apps_launched += 1;
-        state.last_launched_app = terminal.name;
+    else {
+        return;
+    };
+
+    if let Err(error) = spawn_app(&app, &state.listening_socket, &runtime_dir) {
+        state.last_launch_error = format!("{}: {error}", app.name);
+        return;
     }
-    Ok(())
+
+    state.startup_apps_launched += 1;
+    state.last_launched_app = app.name;
+    state.last_launch_error = "none".to_string();
 }
 
-fn launch_pending_app(state: &mut CompositorState) -> Result<()> {
+fn launch_pending_app(state: &mut CompositorState) {
     let Some(index) = state.pending_launch.take() else {
-        return Ok(());
+        return;
     };
     let Some(runtime_dir) = std::env::var_os("XDG_RUNTIME_DIR") else {
-        return Ok(());
+        return;
     };
     let runtime_dir = PathBuf::from(runtime_dir);
     if let Some(app) = state.installed_apps.get(index).cloned() {
-        spawn_app(&app, &state.listening_socket, &runtime_dir)?;
-        state.last_launched_app = app.name;
+        if let Err(error) = spawn_app(&app, &state.listening_socket, &runtime_dir) {
+            state.last_launch_error = format!("{}: {error}", app.name);
+        } else {
+            state.last_launched_app = app.name;
+            state.last_launch_error = "none".to_string();
+        }
     }
-    Ok(())
 }
 
 fn accept_clients(

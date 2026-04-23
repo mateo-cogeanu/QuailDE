@@ -189,6 +189,8 @@ mod platform {
                     state.composed_height = framebuffer.height as i32;
                     state.cursor_x = state.composed_width / 2;
                     state.cursor_y = state.composed_height / 2;
+                    state.cursor_x_precise = state.cursor_x as f32;
+                    state.cursor_y_precise = state.cursor_y as f32;
                     state.clamp_cursor();
                     state.update_input_focus();
                     state.stage = "linux-fbdev-live";
@@ -460,27 +462,31 @@ mod platform {
         );
 
         match (event.type_, event.code, event.value) {
-            (EV_REL, REL_X, delta) => state.cursor_x = state.cursor_x.saturating_add(delta),
-            (EV_REL, REL_Y, delta) => state.cursor_y = state.cursor_y.saturating_add(delta),
+            // Relative mice already report deltas, so QuailDE feeds them into
+            // the high-resolution cursor path directly for smooth movement.
+            (EV_REL, REL_X, delta) => state.move_cursor_relative(delta as f32, 0.0),
+            (EV_REL, REL_Y, delta) => state.move_cursor_relative(0.0, delta as f32),
             (EV_ABS, ABS_X, value) => {
                 update_axis_range(&mut device.abs_x_min, &mut device.abs_x_max, value);
-                state.cursor_x = map_absolute_axis(
+                let target_x = map_absolute_axis(
                     value,
                     device.abs_x_min,
                     device.abs_x_max,
                     state.composed_width,
                     state.cursor_x,
                 );
+                state.move_cursor_absolute(target_x, state.cursor_y);
             }
             (EV_ABS, ABS_Y, value) => {
                 update_axis_range(&mut device.abs_y_min, &mut device.abs_y_max, value);
-                state.cursor_y = map_absolute_axis(
+                let target_y = map_absolute_axis(
                     value,
                     device.abs_y_min,
                     device.abs_y_max,
                     state.composed_height,
                     state.cursor_y,
                 );
+                state.move_cursor_absolute(state.cursor_x, target_y);
             }
             (EV_KEY, BTN_LEFT, 1) => {
                 state.pointer_buttons_pressed = 1;
@@ -493,10 +499,10 @@ mod platform {
                 state.pointer_buttons_pressed = 0;
                 state.end_pointer_press();
             }
-            (EV_KEY, KEY_LEFT, 1) => state.cursor_x = state.cursor_x.saturating_sub(24),
-            (EV_KEY, KEY_RIGHT, 1) => state.cursor_x = state.cursor_x.saturating_add(24),
-            (EV_KEY, KEY_UP, 1) => state.cursor_y = state.cursor_y.saturating_sub(24),
-            (EV_KEY, KEY_DOWN, 1) => state.cursor_y = state.cursor_y.saturating_add(24),
+            (EV_KEY, KEY_LEFT, 1) => state.move_cursor_relative(-24.0, 0.0),
+            (EV_KEY, KEY_RIGHT, 1) => state.move_cursor_relative(24.0, 0.0),
+            (EV_KEY, KEY_UP, 1) => state.move_cursor_relative(0.0, -24.0),
+            (EV_KEY, KEY_DOWN, 1) => state.move_cursor_relative(0.0, 24.0),
             (EV_KEY, KEY_ESC, 1) => state.quit_requested = true,
             _ => {}
         }

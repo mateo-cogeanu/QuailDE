@@ -57,9 +57,12 @@ pub struct CompositorState {
     pub pending_launch: Option<usize>,
     pub startup_apps_launched: usize,
     pub last_launched_app: String,
+    pub last_launch_error: String,
     pub pointer_buttons_pressed: usize,
     pub cursor_x: i32,
     pub cursor_y: i32,
+    pub cursor_x_precise: f32,
+    pub cursor_y_precise: f32,
     pub cursor_visible: bool,
     pub focused_surface_id: Option<u32>,
     pub dragging_surface_id: Option<u32>,
@@ -122,9 +125,12 @@ impl CompositorState {
             pending_launch: None,
             startup_apps_launched: 0,
             last_launched_app: "none".to_string(),
+            last_launch_error: "none".to_string(),
             pointer_buttons_pressed: 0,
             cursor_x: 96,
             cursor_y: 96,
+            cursor_x_precise: 96.0,
+            cursor_y_precise: 96.0,
             cursor_visible: true,
             focused_surface_id: None,
             dragging_surface_id: None,
@@ -218,6 +224,7 @@ impl CompositorState {
             format!("  discovered apps: {}", self.installed_apps.len()),
             format!("  startup apps launched: {}", self.startup_apps_launched),
             format!("  last launched app: {}", self.last_launched_app),
+            format!("  last launch error: {}", self.last_launch_error),
             format!(
                 "  pointer buttons pressed: {}",
                 self.pointer_buttons_pressed
@@ -244,8 +251,28 @@ impl CompositorState {
     pub fn clamp_cursor(&mut self) {
         let max_x = self.composed_width.saturating_sub(1).max(0);
         let max_y = self.composed_height.saturating_sub(1).max(0);
-        self.cursor_x = self.cursor_x.clamp(0, max_x);
-        self.cursor_y = self.cursor_y.clamp(0, max_y);
+        self.cursor_x_precise = self.cursor_x_precise.clamp(0.0, max_x as f32);
+        self.cursor_y_precise = self.cursor_y_precise.clamp(0.0, max_y as f32);
+        self.cursor_x = self.cursor_x_precise.round() as i32;
+        self.cursor_y = self.cursor_y_precise.round() as i32;
+    }
+
+    /// move_cursor_relative applies high-resolution relative motion before the
+    /// integer cursor position is derived for raster composition.
+    pub fn move_cursor_relative(&mut self, delta_x: f32, delta_y: f32) {
+        self.cursor_x_precise += delta_x;
+        self.cursor_y_precise += delta_y;
+        self.clamp_cursor();
+    }
+
+    /// move_cursor_absolute eases absolute-pointer devices toward their target
+    /// so VM tablet input feels more like a real desktop cursor than a grid.
+    pub fn move_cursor_absolute(&mut self, target_x: i32, target_y: i32) {
+        let target_x = target_x as f32;
+        let target_y = target_y as f32;
+        self.cursor_x_precise += (target_x - self.cursor_x_precise) * 0.55;
+        self.cursor_y_precise += (target_y - self.cursor_y_precise) * 0.55;
+        self.clamp_cursor();
     }
 
     /// update_input_focus maps the cursor position onto the top-most committed
@@ -349,7 +376,7 @@ impl CompositorState {
     /// discovered application index so clicks can launch installed apps.
     pub fn dock_app_at_cursor(&self) -> Option<usize> {
         let dock_width = self.composed_width.max(0).min(340) as usize;
-        let dock_height = 72_usize;
+        let dock_height = 84_usize;
         let width = self.composed_width.max(0) as usize;
         let height = self.composed_height.max(0) as usize;
         let dock_x = (width.saturating_sub(dock_width)) / 2;
@@ -357,7 +384,7 @@ impl CompositorState {
         let cursor_x = self.cursor_x.max(0) as usize;
         let cursor_y = self.cursor_y.max(0) as usize;
 
-        if cursor_y < dock_y + 14 || cursor_y >= dock_y + 58 {
+        if cursor_y < dock_y + 16 || cursor_y >= dock_y + 60 {
             return None;
         }
 

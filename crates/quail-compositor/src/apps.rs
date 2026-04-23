@@ -29,11 +29,18 @@ pub enum AppCategory {
 /// discover_system_apps combines desktop-entry discovery with PATH fallbacks so
 /// QuailDE can launch real installed apps instead of a hard-coded shortlist.
 pub fn discover_system_apps() -> Vec<DesktopApp> {
-    let mut discovered = discover_desktop_entries();
-    if discovered.is_empty() {
-        discovered = discover_path_fallbacks();
+    let mut discovered = BTreeMap::<AppCategory, DesktopApp>::new();
+
+    for app in discover_desktop_entries() {
+        discovered.entry(app.category).or_insert(app);
     }
-    discovered
+    for app in discover_path_fallbacks() {
+        discovered.entry(app.category).or_insert(app);
+    }
+
+    let mut apps = discovered.into_values().collect::<Vec<_>>();
+    apps.sort_by_key(|app| category_rank(app.category));
+    apps
 }
 
 /// spawn_app launches a discovered system app with the compositor's Wayland
@@ -160,6 +167,10 @@ fn discover_path_fallbacks() -> Vec<DesktopApp> {
 }
 
 fn find_in_path(binary: &str) -> Option<PathBuf> {
+    if binary.contains('/') {
+        let path = PathBuf::from(binary);
+        return is_executable(&path).then_some(path);
+    }
     let path = env::var_os("PATH")?;
     env::split_paths(&path)
         .map(|directory| directory.join(binary))
@@ -279,6 +290,19 @@ fn sanitize_exec(exec: &str) -> Option<(String, Vec<String>)> {
     if parts.is_empty() {
         return None;
     }
+
+    // Desktop entries often wrap the real command in `env VAR=... app`, so the
+    // launcher strips that preamble and resolves the actual executable.
+    if parts.first().map(String::as_str) == Some("env") {
+        parts.remove(0);
+        while parts.first().is_some_and(|part| part.contains('=')) {
+            parts.remove(0);
+        }
+    }
+    if parts.is_empty() {
+        return None;
+    }
+
     let command = parts.remove(0);
     Some((command, parts))
 }

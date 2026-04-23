@@ -155,9 +155,9 @@ fn normalize_pixel(pixel: u32, format_name: &str) -> u32 {
 fn paint_background(frame: &mut [u32], width: usize, height: usize) {
     for y in 0..height {
         for x in 0..width {
-            let blue = 0x72_u32.saturating_add((y as u32).saturating_mul(0x3A) / height as u32);
-            let green = 0x55_u32.saturating_add((x as u32).saturating_mul(0x46) / width as u32);
-            let red = 0x1D_u32.saturating_add((x as u32).saturating_mul(0x22) / width as u32);
+            let blue = 0x70_u32.saturating_add((y as u32).saturating_mul(0x4A) / height as u32);
+            let green = 0x63_u32.saturating_add((x as u32).saturating_mul(0x42) / width as u32);
+            let red = 0x14_u32.saturating_add((x as u32).saturating_mul(0x28) / width as u32);
             frame[y * width + x] = 0xFF00_0000 | (red << 16) | (green << 8) | blue;
         }
     }
@@ -179,77 +179,94 @@ fn paint_background(frame: &mut [u32], width: usize, height: usize) {
         height as i32 - orb_radius * 2,
         orb_radius,
     );
+    paint_wallpaper_grid(frame, width, height);
 }
 
 fn paint_panel(frame: &mut [u32], width: usize, height: usize) {
-    let panel_height = height.min(38);
-    fill_rect(frame, width, height, 0, 0, width, panel_height, 0xEE1A2030);
-    fill_rect(frame, width, height, 18, 10, 118, 18, 0xFF2B90D9);
-    fill_rect(frame, width, height, 24, 14, 28, 10, 0xFFF4F7FB);
-    fill_rect(frame, width, height, 62, 14, 46, 10, 0xFFBFE2FF);
+    let panel_height = height.min(54);
+    fill_rounded_rect(
+        frame,
+        width,
+        height,
+        14,
+        10,
+        width.saturating_sub(28),
+        panel_height,
+        18,
+        0xD9182333,
+    );
+    fill_rect(frame, width, height, 34, 26, 104, 4, 0x66D6E7F5);
+    fill_rounded_rect(frame, width, height, 26, 18, 122, 24, 12, 0x332B90D9);
+    fill_rounded_rect(frame, width, height, 34, 23, 26, 14, 7, 0xFFF5F8FD);
+    fill_rounded_rect(frame, width, height, 72, 23, 58, 14, 7, 0xFFD5E6F9);
 }
 
 fn paint_status_area(frame: &mut [u32], width: usize, height: usize) {
     let right = width.saturating_sub(18);
-    fill_rect(
+    fill_rounded_rect(
         frame,
         width,
         height,
         right.saturating_sub(172),
         10,
         154,
-        18,
-        0x99374259,
+        32,
+        12,
+        0x8C304157,
     );
-    fill_rect(
+    fill_rounded_rect(
         frame,
         width,
         height,
         right.saturating_sub(160),
-        14,
+        21,
         18,
         10,
+        5,
         0xFFF2C14E,
     );
-    fill_rect(
+    fill_rounded_rect(
         frame,
         width,
         height,
         right.saturating_sub(132),
-        14,
+        21,
         18,
         10,
+        5,
         0xFF67D5B5,
     );
-    fill_rect(
+    fill_rounded_rect(
         frame,
         width,
         height,
         right.saturating_sub(104),
-        14,
+        21,
         18,
         10,
+        5,
         0xFFF26B6B,
     );
-    fill_rect(
+    fill_rounded_rect(
         frame,
         width,
         height,
         right.saturating_sub(70),
-        14,
+        18,
         44,
-        10,
+        14,
+        7,
         0xFFDCE8F5,
     );
 }
 
 fn paint_system_dock(frame: &mut [u32], width: usize, height: usize, state: &CompositorState) {
     let dock_width = width.min(340);
-    let dock_height = 72;
+    let dock_height = 84;
     let dock_x = (width.saturating_sub(dock_width)) / 2;
     let dock_y = height.saturating_sub(dock_height + 18);
 
-    fill_rect(
+    fill_rounded_rect(
         frame,
         width,
         height,
@@ -257,7 +274,8 @@ fn paint_system_dock(frame: &mut [u32], width: usize, height: usize, state: &Com
         dock_y,
         dock_width,
         dock_height,
-        0xCC182132,
+        24,
+        0xC61A2334,
     );
 
     for (index, app) in state.installed_apps.iter().take(5).enumerate() {
@@ -269,26 +287,28 @@ fn paint_system_dock(frame: &mut [u32], width: usize, height: usize, state: &Com
             AppCategory::Editor => 0xFFF279A2,
             AppCategory::Utility => 0xFFC2D3E8,
         };
-        fill_rect(frame, width, height, icon_x, dock_y + 14, 44, 44, color);
-        fill_rect(
+        fill_rounded_rect(frame, width, height, icon_x, dock_y + 16, 44, 44, 14, color);
+        fill_rounded_rect(
             frame,
             width,
             height,
             icon_x + 10,
-            dock_y + 24,
+            dock_y + 26,
             24,
             24,
+            8,
             0xFFF6FAFF,
         );
         let label_width = app.name.len().min(6).saturating_mul(5).max(18);
-        fill_rect(
+        fill_rounded_rect(
             frame,
             width,
             height,
             icon_x + 6,
-            dock_y + 62,
+            dock_y + 66,
             label_width,
             4,
+            2,
             0xCCD9E7F6,
         );
     }
@@ -297,31 +317,41 @@ fn paint_system_dock(frame: &mut [u32], width: usize, height: usize, state: &Com
 fn paint_desktop_icons(frame: &mut [u32], width: usize, height: usize) {
     for index in 0..3 {
         let icon_y = 82 + index * 96;
-        fill_rect(frame, width, height, 28, icon_y, 56, 56, 0xAA223248);
-        fill_rect(frame, width, height, 40, icon_y + 12, 32, 32, 0xFFE9F2FB);
-        fill_rect(frame, width, height, 24, icon_y + 64, 64, 12, 0xAA1A2030);
+        fill_rounded_rect(frame, width, height, 22, icon_y - 6, 72, 82, 20, 0x44202B3E);
+        fill_rounded_rect(frame, width, height, 30, icon_y, 52, 52, 18, 0xAA223248);
+        fill_rounded_rect(
+            frame,
+            width,
+            height,
+            40,
+            icon_y + 12,
+            32,
+            32,
+            10,
+            0xFFE9F2FB,
+        );
+        fill_rounded_rect(frame, width, height, 28, icon_y + 66, 58, 8, 4, 0xAAE6EEF8);
     }
 }
 
 fn paint_cursor(frame: &mut [u32], width: usize, height: usize, cursor_x: i32, cursor_y: i32) {
     let cursor_pattern = [
-        "X...........",
-        "XX..........",
-        "XOX.........",
-        "XOOX........",
-        "XOOOX.......",
-        "XOOOOX......",
-        "XOOOOOX.....",
-        "XOOOOOOX....",
-        "XOOOOX......",
-        "XOOXOX......",
-        "XOX.XOX.....",
-        "XX..XOX.....",
-        "X....XOX....",
-        ".....XOX....",
-        "......XOX...",
-        "......XOX...",
-        ".......XX...",
+        "..SXX...........",
+        ".SSXXX..........",
+        ".SXXOOX.........",
+        ".SXOOOOX........",
+        ".SXOOOOOX.......",
+        ".SXOOOOOOX......",
+        ".SXOOOOOOOX.....",
+        ".SXOOOOOOOOX....",
+        ".SXOOOOOOX......",
+        ".SXOOOOXOX......",
+        ".SXOOX..XOX.....",
+        ".SXXX...XOX.....",
+        "..SX.....XOX....",
+        ".........XOX....",
+        ".........XOX....",
+        "..........XX....",
     ];
 
     for (row_index, row) in cursor_pattern.iter().enumerate() {
@@ -337,6 +367,7 @@ fn paint_cursor(frame: &mut [u32], width: usize, height: usize, cursor_x: i32, c
                 continue;
             }
             match cell {
+                'S' => blend_pixel(&mut frame[y * width + x], 0x66000000),
                 'X' => frame[y * width + x] = 0xFF00_0000,
                 'O' => frame[y * width + x] = 0xFFF5_F7_FA,
                 _ => {}
@@ -364,8 +395,8 @@ fn paint_window_frame(
         .unwrap_or(0)
         .saturating_add(40);
     let body_color = if focused { 0xFFF5F7FB } else { 0xFFE6EBF1 };
-    let title_color = if focused { 0xFF29538A } else { 0xFF46566E };
-    fill_rect(
+    let title_color = if focused { 0xFF2D5C95 } else { 0xFF52647E };
+    fill_rounded_rect(
         frame,
         width,
         height,
@@ -373,9 +404,10 @@ fn paint_window_frame(
         y,
         window_width,
         window_height,
+        16,
         0x88202A38,
     );
-    fill_rect(
+    fill_rounded_rect(
         frame,
         width,
         height,
@@ -383,9 +415,10 @@ fn paint_window_frame(
         y + 3,
         window_width.saturating_sub(6),
         window_height.saturating_sub(6),
+        14,
         body_color,
     );
-    fill_rect(
+    fill_rounded_rect(
         frame,
         width,
         height,
@@ -393,13 +426,14 @@ fn paint_window_frame(
         y + 3,
         window_width.saturating_sub(6),
         34,
+        14,
         title_color,
     );
-    fill_rect(frame, width, height, x + 16, y + 14, 12, 12, 0xFFFF6B6B);
-    fill_rect(frame, width, height, x + 34, y + 14, 12, 12, 0xFFF2C14E);
-    fill_rect(frame, width, height, x + 52, y + 14, 12, 12, 0xFF67D5B5);
+    fill_rounded_rect(frame, width, height, x + 16, y + 14, 12, 12, 6, 0xFFFF6B6B);
+    fill_rounded_rect(frame, width, height, x + 34, y + 14, 12, 12, 6, 0xFFF2C14E);
+    fill_rounded_rect(frame, width, height, x + 52, y + 14, 12, 12, 6, 0xFF67D5B5);
     let title_width = surface.window_title.len().min(24).saturating_mul(7).max(42);
-    fill_rect(
+    fill_rounded_rect(
         frame,
         width,
         height,
@@ -407,6 +441,7 @@ fn paint_window_frame(
         y + 14,
         title_width,
         10,
+        5,
         if focused { 0xFFDDEBFF } else { 0xFFD2DCE8 },
     );
 }
@@ -426,6 +461,98 @@ fn fill_rect(
     for draw_y in y.min(frame_height)..max_y {
         for draw_x in x.min(frame_width)..max_x {
             frame[draw_y * frame_width + draw_x] = color;
+        }
+    }
+}
+
+fn fill_rounded_rect(
+    frame: &mut [u32],
+    frame_width: usize,
+    frame_height: usize,
+    x: usize,
+    y: usize,
+    rect_width: usize,
+    rect_height: usize,
+    radius: usize,
+    color: u32,
+) {
+    let max_x = x.saturating_add(rect_width).min(frame_width);
+    let max_y = y.saturating_add(rect_height).min(frame_height);
+    let radius = radius.min(rect_width / 2).min(rect_height / 2);
+    let radius_i32 = radius as i32;
+
+    for draw_y in y.min(frame_height)..max_y {
+        for draw_x in x.min(frame_width)..max_x {
+            let local_x = draw_x.saturating_sub(x);
+            let local_y = draw_y.saturating_sub(y);
+            let inside = local_x >= radius
+                || local_x + radius >= rect_width
+                || local_y >= radius
+                || local_y + radius >= rect_height
+                || corner_distance(local_x, local_y, rect_width, rect_height, radius_i32);
+            if inside {
+                blend_pixel(&mut frame[draw_y * frame_width + draw_x], color);
+            }
+        }
+    }
+}
+
+fn corner_distance(
+    local_x: usize,
+    local_y: usize,
+    rect_width: usize,
+    rect_height: usize,
+    radius: i32,
+) -> bool {
+    let center_x = if local_x < radius as usize {
+        radius
+    } else {
+        rect_width as i32 - radius - 1
+    };
+    let center_y = if local_y < radius as usize {
+        radius
+    } else {
+        rect_height as i32 - radius - 1
+    };
+    let dx = local_x as i32 - center_x;
+    let dy = local_y as i32 - center_y;
+    dx.saturating_mul(dx) + dy.saturating_mul(dy) <= radius.saturating_mul(radius)
+}
+
+fn blend_pixel(destination: &mut u32, source: u32) {
+    let alpha = ((source >> 24) & 0xFF) as u32;
+    if alpha == 0 {
+        return;
+    }
+    if alpha == 0xFF {
+        *destination = source;
+        return;
+    }
+
+    let inv_alpha = 0xFF_u32.saturating_sub(alpha);
+    let dst = *destination;
+    let src_r = (source >> 16) & 0xFF;
+    let src_g = (source >> 8) & 0xFF;
+    let src_b = source & 0xFF;
+    let dst_r = (dst >> 16) & 0xFF;
+    let dst_g = (dst >> 8) & 0xFF;
+    let dst_b = dst & 0xFF;
+    let red = (src_r * alpha + dst_r * inv_alpha) / 0xFF;
+    let green = (src_g * alpha + dst_g * inv_alpha) / 0xFF;
+    let blue = (src_b * alpha + dst_b * inv_alpha) / 0xFF;
+    *destination = 0xFF00_0000 | (red << 16) | (green << 8) | blue;
+}
+
+fn paint_wallpaper_grid(frame: &mut [u32], width: usize, height: usize) {
+    let step = 48;
+    for y in (0..height).step_by(step) {
+        for x in 0..width {
+            blend_pixel(&mut frame[y * width + x], 0x102A405A);
+        }
+    }
+    for x in (0..width).step_by(step) {
+        for y in 0..height {
+            blend_pixel(&mut frame[y * width + x], 0x0E2A405A);
         }
     }
 }

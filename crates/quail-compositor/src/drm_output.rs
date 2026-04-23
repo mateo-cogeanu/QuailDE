@@ -135,6 +135,8 @@ impl DrmOutput {
         state.composed_height = i32::try_from(height).unwrap_or(720);
         state.cursor_x = state.composed_width / 2;
         state.cursor_y = state.composed_height / 2;
+        state.cursor_x_precise = state.cursor_x as f32;
+        state.cursor_y_precise = state.cursor_y as f32;
         state.clamp_cursor();
         state.update_input_focus();
         state.stage = "linux-drm-live";

@@ -12,6 +12,7 @@ use wayland_server::protocol::{
     wl_callback::WlCallback,
     wl_compositor::WlCompositor,
     wl_keyboard::{KeymapFormat, WlKeyboard},
+    wl_output::{Mode as OutputMode, Subpixel, Transform, WlOutput},
     wl_pointer::WlPointer,
     wl_region::WlRegion,
     wl_seat::{Capability as SeatCapability, WlSeat},
@@ -50,6 +51,9 @@ pub struct XdgWmBaseGlobal;
 
 #[derive(Debug, Clone, Copy)]
 pub struct SeatGlobal;
+
+#[derive(Debug, Clone, Copy)]
+pub struct OutputGlobal;
 
 #[derive(Debug, Clone, Copy)]
 pub struct XdgPositionerState;
@@ -202,6 +206,46 @@ impl GlobalDispatch<WlSeat, SeatGlobal> for CompositorState {
     }
 }
 
+impl GlobalDispatch<WlOutput, OutputGlobal> for CompositorState {
+    fn bind(
+        state: &mut Self,
+        _handle: &DisplayHandle,
+        _client: &Client,
+        resource: New<WlOutput>,
+        _global_data: &OutputGlobal,
+        data_init: &mut DataInit<'_, Self>,
+    ) {
+        // Many desktop clients expect at least one advertised wl_output before
+        // they fully commit to presenting an xdg_toplevel surface.
+        let output = data_init.init(resource, OutputGlobal);
+        output.geometry(
+            0,
+            0,
+            600,
+            340,
+            Subpixel::Unknown,
+            "QuailDE".to_string(),
+            "Virtual Output".to_string(),
+            Transform::Normal,
+        );
+        output.mode(
+            OutputMode::Current | OutputMode::Preferred,
+            state.composed_width.max(1),
+            state.composed_height.max(1),
+            60_000,
+        );
+        output.scale(1);
+        if output.version() >= 2 {
+            output.done();
+        }
+        if output.version() >= 4 {
+            output.name("QuailDE-1".to_string());
+            output.description("QuailDE primary output".to_string());
+        }
+        state.bound_globals += 1;
+    }
+}
+
 impl Dispatch<WlShm, ShmGlobal> for CompositorState {
     fn request(
         state: &mut Self,
@@ -314,6 +358,19 @@ impl Dispatch<WlSeat, SeatGlobal> for CompositorState {
     }
 }
 
+impl Dispatch<WlOutput, OutputGlobal> for CompositorState {
+    fn request(
+        _state: &mut Self,
+        _client: &Client,
+        _resource: &WlOutput,
+        _request: wayland_server::protocol::wl_output::Request,
+        _data: &OutputGlobal,
+        _dhandle: &DisplayHandle,
+        _data_init: &mut DataInit<'_, Self>,
+    ) {
+    }
+}
+
 impl Dispatch<WlSurface, SurfaceState> for CompositorState {
     fn request(
         state: &mut Self,
@@ -406,7 +463,7 @@ impl Dispatch<XdgSurface, XdgSurfaceState> for CompositorState {
                         wl_surface_id: data.wl_surface_id,
                     },
                 );
-                send_xdg_toplevel_configure(resource, &toplevel);
+                send_xdg_toplevel_configure(state, resource, &toplevel);
                 state.xdg_toplevels_created += 1;
                 let scene_surface =
                     state
@@ -682,7 +739,13 @@ fn send_xdg_surface_configure(state: &mut CompositorState, resource: &XdgSurface
     state.last_xdg_configure_serial = serial;
 }
 
-fn send_xdg_toplevel_configure(surface: &XdgSurface, toplevel: &XdgToplevel) {
+fn send_xdg_toplevel_configure(
+    state: &mut CompositorState,
+    surface: &XdgSurface,
+    toplevel: &XdgToplevel,
+) {
+    let serial = next_serial(state);
     toplevel.configure(1280, 720, Vec::new());
-    surface.configure(1);
+    surface.configure(serial);
+    state.last_xdg_configure_serial = serial;
 }

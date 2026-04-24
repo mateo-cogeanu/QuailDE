@@ -33,8 +33,10 @@ pub fn compose_scene(state: &mut CompositorState) -> SoftwareFrame {
             height,
         };
         paint_background(&mut canvas);
-        paint_launcher_surface(&mut canvas, state);
         paint_bottom_panel(&mut canvas, state);
+        if state.launcher_open {
+            paint_launcher_surface(&mut canvas, state);
+        }
     }
 
     let mut ordered_surfaces = state.scene.surfaces.values().collect::<Vec<_>>();
@@ -218,6 +220,14 @@ fn paint_launcher_surface(canvas: &mut Canvas<'_>, state: &CompositorState) {
     let panel_y = canvas.height.saturating_sub(panel_height + 78);
     let sidebar_width = 256;
 
+    canvas.fill_rounded_rect(
+        panel_x + 8,
+        panel_y + 10,
+        panel_width,
+        panel_height,
+        24,
+        0x4410161E,
+    );
     canvas.fill_rounded_rect(panel_x, panel_y, panel_width, panel_height, 20, 0xE5161A21);
     canvas.fill_rounded_rect(
         panel_x + 1,
@@ -227,6 +237,7 @@ fn paint_launcher_surface(canvas: &mut Canvas<'_>, state: &CompositorState) {
         20,
         0xF01C222C,
     );
+    canvas.fill_rect(panel_x, panel_y + 58, panel_width, 1, 0xFF2B3240);
     canvas.fill_rounded_rect(
         panel_x + 278,
         panel_y + 14,
@@ -385,6 +396,7 @@ fn paint_launcher_surface(canvas: &mut Canvas<'_>, state: &CompositorState) {
             14,
             if index == 0 { 0xFF24394E } else { 0xFF161B24 },
         );
+        canvas.fill_rounded_rect(tile_x + 1, tile_y + 1, 94, 100, 13, 0x14FF_FFFF);
         canvas.fill_rounded_rect(tile_x + 22, tile_y + 14, 50, 50, 16, color);
         canvas.icon(&entry.icon_name, tile_x + 28, tile_y + 20, 38, 38);
         canvas.text(
@@ -409,9 +421,25 @@ fn paint_bottom_panel(canvas: &mut Canvas<'_>, state: &CompositorState) {
     let panel_y = canvas.height.saturating_sub(panel_height);
     canvas.fill_rect(0, panel_y, canvas.width, panel_height, 0xEE131821);
     canvas.fill_rect(0, panel_y, canvas.width, 1, 0xFF2B3240);
+    canvas.fill_rounded_rect(
+        12,
+        panel_y + 7,
+        40,
+        40,
+        12,
+        if state.launcher_open {
+            0xFF20384D
+        } else {
+            0xFF202631
+        },
+    );
+    canvas.fill_rounded_rect(22, panel_y + 17, 8, 8, 4, 0xFF59B6FF);
+    canvas.fill_rounded_rect(34, panel_y + 17, 8, 8, 4, 0xFFFFA64D);
+    canvas.fill_rounded_rect(22, panel_y + 29, 8, 8, 4, 0xFF4CBF8A);
+    canvas.fill_rounded_rect(34, panel_y + 29, 8, 8, 4, 0xFFB36DFF);
 
     for (index, entry) in state.launcher.entries.iter().take(6).enumerate() {
-        let icon_x = 18 + index * 52;
+        let icon_x = 68 + index * 52;
         let color = match entry.category {
             AppCategory::Terminal => 0xFF4C6FFF,
             AppCategory::Browser => 0xFFFFA64D,

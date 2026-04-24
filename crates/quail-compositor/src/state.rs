@@ -67,11 +67,15 @@ pub struct CompositorState {
     pub last_launched_app: String,
     pub last_launch_error: String,
     pub pointer_buttons_pressed: usize,
+    pub shell_click_active: bool,
     pub cursor_x: i32,
     pub cursor_y: i32,
     pub cursor_x_precise: f32,
     pub cursor_y_precise: f32,
+    pub cursor_target_x: f32,
+    pub cursor_target_y: f32,
     pub cursor_visible: bool,
+    pub launcher_open: bool,
     pub focused_surface_id: Option<u32>,
     pub pointer_focus_surface_id: Option<u32>,
     pub dragging_surface_id: Option<u32>,
@@ -142,11 +146,15 @@ impl CompositorState {
             last_launched_app: "none".to_string(),
             last_launch_error: "none".to_string(),
             pointer_buttons_pressed: 0,
+            shell_click_active: false,
             cursor_x: 96,
             cursor_y: 96,
             cursor_x_precise: 96.0,
             cursor_y_precise: 96.0,
+            cursor_target_x: 96.0,
+            cursor_target_y: 96.0,
             cursor_visible: true,
+            launcher_open: false,
             focused_surface_id: None,
             pointer_focus_surface_id: None,
             dragging_surface_id: None,
@@ -248,8 +256,10 @@ impl CompositorState {
                 "  pointer buttons pressed: {}",
                 self.pointer_buttons_pressed
             ),
+            format!("  shell click active: {}", self.shell_click_active),
             format!("  cursor position: {},{}", self.cursor_x, self.cursor_y),
             format!("  cursor visible: {}", self.cursor_visible),
+            format!("  launcher open: {}", self.launcher_open),
             format!(
                 "  focused surface: {}",
                 self.focused_surface_id
@@ -278,6 +288,8 @@ impl CompositorState {
         let max_y = self.composed_height.saturating_sub(1).max(0);
         self.cursor_x_precise = self.cursor_x_precise.clamp(0.0, max_x as f32);
         self.cursor_y_precise = self.cursor_y_precise.clamp(0.0, max_y as f32);
+        self.cursor_target_x = self.cursor_target_x.clamp(0.0, max_x as f32);
+        self.cursor_target_y = self.cursor_target_y.clamp(0.0, max_y as f32);
         self.cursor_x = self.cursor_x_precise.round() as i32;
         self.cursor_y = self.cursor_y_precise.round() as i32;
     }
@@ -285,16 +297,34 @@ impl CompositorState {
     /// move_cursor_relative applies high-resolution relative motion before the
     /// integer cursor position is derived for raster composition.
     pub fn move_cursor_relative(&mut self, delta_x: f32, delta_y: f32) {
-        self.cursor_x_precise += delta_x;
-        self.cursor_y_precise += delta_y;
+        self.cursor_target_x += delta_x;
+        self.cursor_target_y += delta_y;
+        self.cursor_x_precise = self.cursor_target_x;
+        self.cursor_y_precise = self.cursor_target_y;
         self.clamp_cursor();
     }
 
     /// move_cursor_absolute eases absolute-pointer devices toward their target
     /// so VM tablet input feels more like a real desktop cursor than a grid.
     pub fn move_cursor_absolute(&mut self, target_x: f32, target_y: f32) {
-        self.cursor_x_precise += (target_x - self.cursor_x_precise) * 0.55;
-        self.cursor_y_precise += (target_y - self.cursor_y_precise) * 0.55;
+        self.cursor_target_x = target_x;
+        self.cursor_target_y = target_y;
+        self.clamp_cursor();
+    }
+
+    /// animate_cursor_motion advances the visible cursor toward its target every
+    /// frame so sparse VM tablet events still produce smooth movement.
+    pub fn animate_cursor_motion(&mut self) {
+        let delta_x = self.cursor_target_x - self.cursor_x_precise;
+        let delta_y = self.cursor_target_y - self.cursor_y_precise;
+        self.cursor_x_precise += delta_x * 0.35;
+        self.cursor_y_precise += delta_y * 0.35;
+        if delta_x.abs() < 0.15 {
+            self.cursor_x_precise = self.cursor_target_x;
+        }
+        if delta_y.abs() < 0.15 {
+            self.cursor_y_precise = self.cursor_target_y;
+        }
         self.clamp_cursor();
     }
 
@@ -399,6 +429,9 @@ impl CompositorState {
     /// launcher_app_at_cursor resolves the launcher grid tile under the cursor
     /// to a discovered application index so the shell can start real apps.
     pub fn launcher_app_at_cursor(&self) -> Option<usize> {
+        if !self.launcher_open {
+            return None;
+        }
         let height = self.composed_height.max(0) as usize;
         let panel_height = height.min(620);
         let panel_x = 18;
@@ -423,6 +456,36 @@ impl CompositorState {
             })
     }
 
+    /// launcher_bounds_contains returns whether the cursor currently sits inside
+    /// the open launcher surface so outside clicks can dismiss it.
+    pub fn launcher_bounds_contains(&self) -> bool {
+        if !self.launcher_open {
+            return false;
+        }
+        let width = self.composed_width.max(0) as usize;
+        let height = self.composed_height.max(0) as usize;
+        let panel_width = width.min(780);
+        let panel_height = height.min(620);
+        let panel_x = 18;
+        let panel_y = height.saturating_sub(panel_height + 78);
+        let cursor_x = self.cursor_x.max(0) as usize;
+        let cursor_y = self.cursor_y.max(0) as usize;
+        cursor_x >= panel_x
+            && cursor_x < panel_x + panel_width
+            && cursor_y >= panel_y
+            && cursor_y < panel_y + panel_height
+    }
+
+    /// menu_button_at_cursor resolves the start-style menu button in the bottom
+    /// panel so QuailDE can toggle the launcher like a normal DE shell.
+    pub fn menu_button_at_cursor(&self) -> bool {
+        let height = self.composed_height.max(0) as usize;
+        let panel_y = height.saturating_sub(54);
+        let cursor_x = self.cursor_x.max(0) as usize;
+        let cursor_y = self.cursor_y.max(0) as usize;
+        cursor_x >= 12 && cursor_x < 52 && cursor_y >= panel_y + 7 && cursor_y < panel_y + 47
+    }
+
     /// panel_app_at_cursor resolves the bottom-panel launcher slot under the
     /// cursor to a discovered application index.
     pub fn panel_app_at_cursor(&self) -> Option<usize> {
@@ -441,9 +504,32 @@ impl CompositorState {
             .take(6)
             .enumerate()
             .find_map(|(index, entry)| {
-                let icon_x = 18 + index * 52;
+                let icon_x = 68 + index * 52;
                 (cursor_x >= icon_x && cursor_x < icon_x + 36).then_some(entry.app_index)
             })
+    }
+
+    /// handle_shell_click resolves launcher toggles and app launches before the
+    /// click is forwarded to client windows.
+    pub fn handle_shell_click(&mut self) -> bool {
+        if self.menu_button_at_cursor() {
+            self.launcher_open = !self.launcher_open;
+            return true;
+        }
+        if let Some(index) = self.launcher_app_at_cursor() {
+            self.pending_launch = Some(index);
+            self.launcher_open = false;
+            return true;
+        }
+        if let Some(index) = self.panel_app_at_cursor() {
+            self.pending_launch = Some(index);
+            return true;
+        }
+        if self.launcher_open && !self.launcher_bounds_contains() {
+            self.launcher_open = false;
+            return true;
+        }
+        false
     }
 
     /// route_pointer_motion emits wl_pointer focus and motion events to the

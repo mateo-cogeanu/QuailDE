@@ -533,11 +533,17 @@ mod platform {
             (EV_KEY, KEY_RIGHT, 1) => state.move_cursor_relative(24.0, 0.0),
             (EV_KEY, KEY_UP, 1) => state.move_cursor_relative(0.0, -24.0),
             (EV_KEY, KEY_DOWN, 1) => state.move_cursor_relative(0.0, 24.0),
-            (EV_KEY, KEY_ESC, 1) => state.quit_requested = true,
+            (EV_KEY, KEY_ESC, 1) => {
+                if !state.route_shell_key(u32::from(KEY_ESC), true) {
+                    state.quit_requested = true;
+                }
+            }
             (EV_KEY, code, value) if code < BTN_LEFT => {
                 // Terminal focus should take precedence over client focus so
                 // QuailDE's built-in PTY behaves like a real first-party app.
-                if !state.route_terminal_key(u32::from(code), value != 0) {
+                if !state.route_shell_key(u32::from(code), value != 0)
+                    && !state.route_terminal_key(u32::from(code), value != 0)
+                {
                     state.route_keyboard_key(u32::from(code), value != 0);
                 }
             }

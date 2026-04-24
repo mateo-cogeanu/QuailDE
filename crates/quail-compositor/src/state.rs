@@ -79,6 +79,16 @@ pub struct CompositorState {
     pub cursor_target_y: f32,
     pub cursor_visible: bool,
     pub launcher_open: bool,
+    pub quick_settings_open: bool,
+    pub power_menu_open: bool,
+    pub active_workspace: usize,
+    pub workspace_count: usize,
+    pub notifications: Vec<String>,
+    pub wifi_enabled: bool,
+    pub bluetooth_enabled: bool,
+    pub night_light_enabled: bool,
+    pub brightness_level: u8,
+    pub volume_level: u8,
     pub terminal: BuiltinTerminalState,
     pub focused_surface_id: Option<u32>,
     pub pointer_focus_surface_id: Option<u32>,
@@ -161,6 +171,16 @@ impl CompositorState {
             cursor_target_y: 96.0,
             cursor_visible: true,
             launcher_open: false,
+            quick_settings_open: false,
+            power_menu_open: false,
+            active_workspace: 0,
+            workspace_count: 4,
+            notifications: vec!["Welcome to QuailDE".to_string()],
+            wifi_enabled: true,
+            bluetooth_enabled: false,
+            night_light_enabled: false,
+            brightness_level: 72,
+            volume_level: 48,
             terminal: BuiltinTerminalState::new(),
             focused_surface_id: None,
             pointer_focus_surface_id: None,
@@ -271,6 +291,10 @@ impl CompositorState {
             format!("  cursor position: {},{}", self.cursor_x, self.cursor_y),
             format!("  cursor visible: {}", self.cursor_visible),
             format!("  launcher open: {}", self.launcher_open),
+            format!("  quick settings open: {}", self.quick_settings_open),
+            format!("  power menu open: {}", self.power_menu_open),
+            format!("  active workspace: {}", self.active_workspace + 1),
+            format!("  notifications: {}", self.notifications.len()),
             format!("  terminal visible: {}", self.terminal.snapshot().visible),
             format!(
                 "  focused surface: {}",
@@ -355,7 +379,11 @@ impl CompositorState {
                 let bottom = surface.y.saturating_add(height).saturating_add(6);
                 let inside_x = cursor_x >= left && cursor_x < right;
                 let inside_y = cursor_y >= top && cursor_y < bottom;
-                if inside_x && inside_y && surface.is_toplevel {
+                if inside_x
+                    && inside_y
+                    && surface.is_toplevel
+                    && surface.workspace == self.active_workspace
+                {
                     Some(*id)
                 } else {
                     None
@@ -507,6 +535,119 @@ impl CompositorState {
         cursor_x >= 12 && cursor_x < 52 && cursor_y >= panel_y + 7 && cursor_y < panel_y + 47
     }
 
+    /// workspace_at_cursor resolves the workspace pill under the pointer in the
+    /// bottom panel so QuailDE can switch desktops without a keyboard shortcut.
+    pub fn workspace_at_cursor(&self) -> Option<usize> {
+        let height = self.composed_height.max(0) as usize;
+        let panel_y = height.saturating_sub(54);
+        let start_x = 392;
+        let cursor_x = self.cursor_x.max(0) as usize;
+        let cursor_y = self.cursor_y.max(0) as usize;
+        if cursor_y < panel_y + 11 || cursor_y >= panel_y + 43 {
+            return None;
+        }
+        (0..self.workspace_count).find(|workspace| {
+            let pill_x = start_x + workspace * 42;
+            cursor_x >= pill_x && cursor_x < pill_x + 34
+        })
+    }
+
+    /// quick_settings_button_at_cursor resolves the panel control that opens
+    /// QuailDE's daily-driver toggles for connectivity, brightness, and volume.
+    pub fn quick_settings_button_at_cursor(&self) -> bool {
+        let height = self.composed_height.max(0) as usize;
+        let panel_y = height.saturating_sub(54);
+        let cursor_x = self.cursor_x.max(0) as usize;
+        let cursor_y = self.cursor_y.max(0) as usize;
+        let button_x = self.composed_width.max(0) as usize - 206;
+        cursor_x >= button_x
+            && cursor_x < button_x + 74
+            && cursor_y >= panel_y + 10
+            && cursor_y < panel_y + 42
+    }
+
+    /// power_button_at_cursor resolves the panel control that opens the power
+    /// menu with lock, log-out, restart, and shutdown-style actions.
+    pub fn power_button_at_cursor(&self) -> bool {
+        let height = self.composed_height.max(0) as usize;
+        let panel_y = height.saturating_sub(54);
+        let cursor_x = self.cursor_x.max(0) as usize;
+        let cursor_y = self.cursor_y.max(0) as usize;
+        let button_x = self.composed_width.max(0) as usize - 116;
+        cursor_x >= button_x
+            && cursor_x < button_x + 44
+            && cursor_y >= panel_y + 10
+            && cursor_y < panel_y + 42
+    }
+
+    /// quick_settings_action_at_cursor resolves the toggle row under the
+    /// pointer so the menu can flip common desktop settings quickly.
+    pub fn quick_settings_action_at_cursor(&self) -> Option<usize> {
+        if !self.quick_settings_open {
+            return None;
+        }
+        let panel_x = self.composed_width.max(0) as usize - 286;
+        let panel_y = self.composed_height.max(0) as usize - 270;
+        let cursor_x = self.cursor_x.max(0) as usize;
+        let cursor_y = self.cursor_y.max(0) as usize;
+        if cursor_x < panel_x + 18 || cursor_x >= panel_x + 250 {
+            return None;
+        }
+        (0..5).find(|index| {
+            let item_y = panel_y + 52 + index * 34;
+            cursor_y >= item_y && cursor_y < item_y + 26
+        })
+    }
+
+    /// power_action_at_cursor resolves the selected item inside the power menu.
+    pub fn power_action_at_cursor(&self) -> Option<usize> {
+        if !self.power_menu_open {
+            return None;
+        }
+        let panel_x = self.composed_width.max(0) as usize - 224;
+        let panel_y = self.composed_height.max(0) as usize - 246;
+        let cursor_x = self.cursor_x.max(0) as usize;
+        let cursor_y = self.cursor_y.max(0) as usize;
+        if cursor_x < panel_x + 18 || cursor_x >= panel_x + 186 {
+            return None;
+        }
+        (0..4).find(|index| {
+            let item_y = panel_y + 48 + index * 38;
+            cursor_y >= item_y && cursor_y < item_y + 28
+        })
+    }
+
+    /// quick_settings_bounds_contains lets outside clicks dismiss the quick
+    /// settings popover like a normal desktop panel menu.
+    pub fn quick_settings_bounds_contains(&self) -> bool {
+        if !self.quick_settings_open {
+            return false;
+        }
+        let panel_x = self.composed_width.max(0) as usize - 286;
+        let panel_y = self.composed_height.max(0) as usize - 270;
+        let cursor_x = self.cursor_x.max(0) as usize;
+        let cursor_y = self.cursor_y.max(0) as usize;
+        cursor_x >= panel_x
+            && cursor_x < panel_x + 268
+            && cursor_y >= panel_y
+            && cursor_y < panel_y + 208
+    }
+
+    /// power_menu_bounds_contains lets outside clicks dismiss the power menu.
+    pub fn power_menu_bounds_contains(&self) -> bool {
+        if !self.power_menu_open {
+            return false;
+        }
+        let panel_x = self.composed_width.max(0) as usize - 224;
+        let panel_y = self.composed_height.max(0) as usize - 246;
+        let cursor_x = self.cursor_x.max(0) as usize;
+        let cursor_y = self.cursor_y.max(0) as usize;
+        cursor_x >= panel_x
+            && cursor_x < panel_x + 196
+            && cursor_y >= panel_y
+            && cursor_y < panel_y + 212
+    }
+
     /// panel_app_at_cursor resolves the bottom-panel launcher slot under the
     /// cursor to a discovered application index.
     pub fn panel_app_at_cursor(&self) -> Option<usize> {
@@ -535,7 +676,35 @@ impl CompositorState {
     pub fn handle_shell_click(&mut self) -> bool {
         if self.menu_button_at_cursor() {
             self.launcher_open = !self.launcher_open;
+            self.quick_settings_open = false;
+            self.power_menu_open = false;
             self.terminal.unfocus();
+            return true;
+        }
+        if let Some(workspace) = self.workspace_at_cursor() {
+            self.switch_workspace(workspace);
+            return true;
+        }
+        if self.quick_settings_button_at_cursor() {
+            self.quick_settings_open = !self.quick_settings_open;
+            self.launcher_open = false;
+            self.power_menu_open = false;
+            self.terminal.unfocus();
+            return true;
+        }
+        if self.power_button_at_cursor() {
+            self.power_menu_open = !self.power_menu_open;
+            self.launcher_open = false;
+            self.quick_settings_open = false;
+            self.terminal.unfocus();
+            return true;
+        }
+        if let Some(action) = self.quick_settings_action_at_cursor() {
+            self.apply_quick_settings_action(action);
+            return true;
+        }
+        if let Some(action) = self.power_action_at_cursor() {
+            self.apply_power_action(action);
             return true;
         }
         if let Some(index) = self.launcher_section_at_cursor() {
@@ -556,16 +725,28 @@ impl CompositorState {
         if let Some(index) = self.launcher_app_at_cursor() {
             self.pending_launch = Some(index);
             self.launcher_open = false;
+            self.quick_settings_open = false;
+            self.power_menu_open = false;
             self.terminal.unfocus();
             return true;
         }
         if let Some(index) = self.panel_app_at_cursor() {
             self.pending_launch = Some(index);
+            self.quick_settings_open = false;
+            self.power_menu_open = false;
             self.terminal.unfocus();
             return true;
         }
         if self.launcher_open && !self.launcher_bounds_contains() {
             self.launcher_open = false;
+            return true;
+        }
+        if self.quick_settings_open && !self.quick_settings_bounds_contains() {
+            self.quick_settings_open = false;
+            return true;
+        }
+        if self.power_menu_open && !self.power_menu_bounds_contains() {
+            self.power_menu_open = false;
             return true;
         }
         self.terminal.unfocus();
@@ -697,10 +878,158 @@ impl CompositorState {
         self.next_serial
     }
 
+    /// push_notification records a short shell message so launches, workspace
+    /// switches, and power actions have visible user feedback in the desktop.
+    pub fn push_notification(&mut self, message: impl Into<String>) {
+        self.notifications.push(message.into());
+        while self.notifications.len() > 4 {
+            self.notifications.remove(0);
+        }
+    }
+
+    /// switch_workspace moves the shell to a different desktop and clears any
+    /// focus that would point at windows no longer visible on the new desktop.
+    pub fn switch_workspace(&mut self, workspace: usize) {
+        let clamped = workspace.min(self.workspace_count.saturating_sub(1));
+        self.active_workspace = clamped;
+        self.focused_surface_id = None;
+        self.dragging_surface_id = None;
+        self.terminal.unfocus();
+        self.push_notification(format!("Switched to workspace {}", clamped + 1));
+    }
+
+    /// route_shell_key lets launcher search and shell overlays react to keys
+    /// before input is offered to the terminal or focused client surface.
+    pub fn route_shell_key(&mut self, linux_key_code: u32, pressed: bool) -> bool {
+        if !pressed {
+            return false;
+        }
+        match linux_key_code {
+            1 if self.launcher_open || self.quick_settings_open || self.power_menu_open => {
+                self.launcher_open = false;
+                self.quick_settings_open = false;
+                self.power_menu_open = false;
+                return true;
+            }
+            14 if self.launcher_open => {
+                self.launcher_search_query.pop();
+                return true;
+            }
+            _ => {}
+        }
+
+        if self.launcher_open
+            && let Some(ch) = shell_search_char(linux_key_code)
+        {
+            self.launcher_search_query.push(ch);
+            return true;
+        }
+
+        false
+    }
+
     /// route_terminal_key forwards raw Linux key codes to the built-in shell
     /// terminal before client routing, giving QuailDE a fallback terminal app
     /// even when no external graphical terminal is present yet.
     pub fn route_terminal_key(&mut self, linux_key_code: u32, pressed: bool) -> bool {
         self.terminal.handle_key_event(linux_key_code, pressed)
+    }
+
+    fn apply_quick_settings_action(&mut self, action: usize) {
+        match action {
+            0 => {
+                self.wifi_enabled = !self.wifi_enabled;
+                self.push_notification(if self.wifi_enabled {
+                    "Wi-Fi enabled"
+                } else {
+                    "Wi-Fi disabled"
+                });
+            }
+            1 => {
+                self.bluetooth_enabled = !self.bluetooth_enabled;
+                self.push_notification(if self.bluetooth_enabled {
+                    "Bluetooth enabled"
+                } else {
+                    "Bluetooth disabled"
+                });
+            }
+            2 => {
+                self.night_light_enabled = !self.night_light_enabled;
+                self.push_notification(if self.night_light_enabled {
+                    "Night light enabled"
+                } else {
+                    "Night light disabled"
+                });
+            }
+            3 => {
+                self.brightness_level = (self.brightness_level.saturating_add(10)).min(100);
+                self.push_notification(format!("Brightness {}%", self.brightness_level));
+            }
+            4 => {
+                self.volume_level = (self.volume_level.saturating_add(10)).min(100);
+                self.push_notification(format!("Volume {}%", self.volume_level));
+            }
+            _ => {}
+        }
+    }
+
+    fn apply_power_action(&mut self, action: usize) {
+        match action {
+            0 => self.push_notification("Screen lock is not wired yet"),
+            1 => self.push_notification("Session log out is not wired yet"),
+            2 => {
+                self.push_notification("Restart requested");
+                self.quit_requested = true;
+            }
+            3 => {
+                self.push_notification("Powering down QuailDE session");
+                self.quit_requested = true;
+            }
+            _ => {}
+        }
+        self.power_menu_open = false;
+    }
+}
+
+fn shell_search_char(linux_key_code: u32) -> Option<char> {
+    match linux_key_code {
+        2 => Some('1'),
+        3 => Some('2'),
+        4 => Some('3'),
+        5 => Some('4'),
+        6 => Some('5'),
+        7 => Some('6'),
+        8 => Some('7'),
+        9 => Some('8'),
+        10 => Some('9'),
+        11 => Some('0'),
+        16 => Some('q'),
+        17 => Some('w'),
+        18 => Some('e'),
+        19 => Some('r'),
+        20 => Some('t'),
+        21 => Some('y'),
+        22 => Some('u'),
+        23 => Some('i'),
+        24 => Some('o'),
+        25 => Some('p'),
+        30 => Some('a'),
+        31 => Some('s'),
+        32 => Some('d'),
+        33 => Some('f'),
+        34 => Some('g'),
+        35 => Some('h'),
+        36 => Some('j'),
+        37 => Some('k'),
+        38 => Some('l'),
+        44 => Some('z'),
+        45 => Some('x'),
+        46 => Some('c'),
+        47 => Some('v'),
+        48 => Some('b'),
+        49 => Some('n'),
+        50 => Some('m'),
+        57 => Some(' '),
+        _ => None,
     }
 }

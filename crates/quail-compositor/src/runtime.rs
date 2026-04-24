@@ -143,12 +143,14 @@ fn launch_startup_apps(state: &mut CompositorState) {
 
     if let Err(error) = launch_app(state, &app, &runtime_dir) {
         state.last_launch_error = format!("{}: {error}", app.name);
+        state.push_notification(format!("Failed to launch {}", app.name));
         return;
     }
 
     state.startup_apps_launched += 1;
     state.last_launched_app = app.name;
     state.last_launch_error = "none".to_string();
+    state.push_notification(format!("Started {}", state.last_launched_app));
 }
 
 fn launch_pending_app(state: &mut CompositorState) {
@@ -162,9 +164,11 @@ fn launch_pending_app(state: &mut CompositorState) {
     if let Some(app) = state.installed_apps.get(index).cloned() {
         if let Err(error) = launch_app(state, &app, &runtime_dir) {
             state.last_launch_error = format!("{}: {error}", app.name);
+            state.push_notification(format!("Failed to launch {}", app.name));
         } else {
             state.last_launched_app = app.name;
             state.last_launch_error = "none".to_string();
+            state.push_notification(format!("Opened {}", state.last_launched_app));
         }
     }
 }
@@ -178,6 +182,7 @@ fn launch_app(
 ) -> Result<()> {
     if crate::terminal::BuiltinTerminalState::is_builtin_terminal_command(&app.command) {
         state.terminal.ensure_started()?;
+        state.terminal.set_workspace(state.active_workspace);
         state.terminal.show();
         return Ok(());
     }

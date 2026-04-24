@@ -3,6 +3,8 @@
 ## 2026-04-24
 - Added a built-in PTY-backed `Quail Terminal` so QuailDE can launch and focus a real first-party terminal surface from the panel and launcher even on minimal Linux installs without a working external Wayland terminal.
 - Routed Linux keyboard input through the built-in terminal before focused clients when the terminal has focus, and painted the terminal as live shell text instead of another static shell placeholder so QuailDE relies less on decorative rectangle-only UI.
+- Made the built-in terminal more usable for daily shell work by adding shifted symbol support, caps lock awareness, more navigation keys, a status footer, and workspace-aware visibility so it behaves more like a real desktop terminal window.
+- Added the first everyday shell features around the compositor: workspace switching from the panel, launcher search typing, shell notifications, a quick-settings popover for common toggles, a simple power menu, and workspace-aware routing for newly created client surfaces.
 
 ## 2026-04-21
 - Added a repo-local workflow in `AGENTS.md` to keep code comments, changelog updates, and GitHub pushes top of mind for every change.

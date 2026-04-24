@@ -138,6 +138,7 @@ impl Dispatch<WlCompositor, CompositorGlobal> for CompositorState {
                     object_id,
                     SceneSurface {
                         object_id,
+                        workspace: _state.active_workspace,
                         x: 48 + (surface_index as i32 % 6) * 28,
                         y: 72 + (surface_index as i32 % 6) * 28,
                         resource: Some(surface.clone()),

@@ -21,6 +21,7 @@ pub struct TerminalSnapshot {
     pub visible: bool,
     pub focused: bool,
     pub started: bool,
+    pub workspace: usize,
     pub x: i32,
     pub y: i32,
     pub width: i32,
@@ -33,6 +34,7 @@ struct TerminalShared {
     visible: bool,
     focused: bool,
     started: bool,
+    workspace: usize,
     x: i32,
     y: i32,
     width: i32,
@@ -40,6 +42,8 @@ struct TerminalShared {
     lines: Vec<String>,
     current_line: String,
     title: String,
+    shift_pressed: bool,
+    caps_lock: bool,
 }
 
 impl BuiltinTerminalState {
@@ -49,6 +53,7 @@ impl BuiltinTerminalState {
                 visible: false,
                 focused: false,
                 started: false,
+                workspace: 0,
                 x: 160,
                 y: 112,
                 width: 960,
@@ -56,6 +61,8 @@ impl BuiltinTerminalState {
                 lines: vec!["Quail Terminal ready".to_string()],
                 current_line: String::new(),
                 title: "Quail Terminal".to_string(),
+                shift_pressed: false,
+                caps_lock: false,
             })),
             writer: Arc::new(Mutex::new(None)),
         }
@@ -134,6 +141,7 @@ impl BuiltinTerminalState {
             visible: shared.visible,
             focused: shared.focused,
             started: shared.started,
+            workspace: shared.workspace,
             x: shared.x,
             y: shared.y,
             width: shared.width,
@@ -141,6 +149,23 @@ impl BuiltinTerminalState {
             lines,
             title: shared.title.clone(),
         }
+    }
+
+    /// set_workspace keeps the terminal on the currently active workspace so it
+    /// behaves more like a real desktop window than a global floating overlay.
+    pub fn set_workspace(&self, workspace: usize) {
+        if let Ok(mut shared) = self.shared.lock() {
+            shared.workspace = workspace;
+        }
+    }
+
+    /// visible_on_workspace tells the compositor whether the terminal belongs
+    /// on the workspace currently being painted.
+    pub fn visible_on_workspace(&self, workspace: usize) -> bool {
+        self.shared
+            .lock()
+            .map(|shared| shared.visible && shared.workspace == workspace)
+            .unwrap_or(false)
     }
 
     pub fn ensure_started(&self) -> Result<()> {
@@ -199,10 +224,25 @@ impl BuiltinTerminalState {
     }
 
     pub fn handle_key_event(&self, linux_key_code: u32, pressed: bool) -> bool {
-        if !pressed || !self.is_focused() {
+        let Ok(mut shared) = self.shared.lock() else {
+            return false;
+        };
+        if linux_key_code == 42 || linux_key_code == 54 {
+            shared.shift_pressed = pressed;
+            return shared.focused;
+        }
+        if linux_key_code == 58 && pressed {
+            shared.caps_lock = !shared.caps_lock;
+            return shared.focused;
+        }
+        if !pressed || !shared.focused {
             return false;
         }
-        let Some(bytes) = translate_linux_key(linux_key_code) else {
+        let shifted = shared.shift_pressed;
+        let caps_lock = shared.caps_lock;
+        drop(shared);
+
+        let Some(bytes) = translate_linux_key(linux_key_code, shifted, caps_lock) else {
             return false;
         };
         let Ok(mut writer_slot) = self.writer.lock() else {
@@ -267,61 +307,346 @@ fn append_terminal_output(shared: &Arc<Mutex<TerminalShared>>, bytes: &[u8]) {
     }
 }
 
-fn translate_linux_key(linux_key_code: u32) -> Option<Vec<u8>> {
+fn translate_linux_key(linux_key_code: u32, shifted: bool, caps_lock: bool) -> Option<Vec<u8>> {
+    let uppercase = shifted ^ caps_lock;
     let byte = match linux_key_code {
-        2 => b'1',
-        3 => b'2',
-        4 => b'3',
-        5 => b'4',
-        6 => b'5',
-        7 => b'6',
-        8 => b'7',
-        9 => b'8',
-        10 => b'9',
-        11 => b'0',
-        12 => b'-',
-        13 => b'=',
+        2 => {
+            if shifted {
+                b'!'
+            } else {
+                b'1'
+            }
+        }
+        3 => {
+            if shifted {
+                b'@'
+            } else {
+                b'2'
+            }
+        }
+        4 => {
+            if shifted {
+                b'#'
+            } else {
+                b'3'
+            }
+        }
+        5 => {
+            if shifted {
+                b'$'
+            } else {
+                b'4'
+            }
+        }
+        6 => {
+            if shifted {
+                b'%'
+            } else {
+                b'5'
+            }
+        }
+        7 => {
+            if shifted {
+                b'^'
+            } else {
+                b'6'
+            }
+        }
+        8 => {
+            if shifted {
+                b'&'
+            } else {
+                b'7'
+            }
+        }
+        9 => {
+            if shifted {
+                b'*'
+            } else {
+                b'8'
+            }
+        }
+        10 => {
+            if shifted {
+                b'('
+            } else {
+                b'9'
+            }
+        }
+        11 => {
+            if shifted {
+                b')'
+            } else {
+                b'0'
+            }
+        }
+        12 => {
+            if shifted {
+                b'_'
+            } else {
+                b'-'
+            }
+        }
+        13 => {
+            if shifted {
+                b'+'
+            } else {
+                b'='
+            }
+        }
         15 => b'\t',
-        16 => b'q',
-        17 => b'w',
-        18 => b'e',
-        19 => b'r',
-        20 => b't',
-        21 => b'y',
-        22 => b'u',
-        23 => b'i',
-        24 => b'o',
-        25 => b'p',
-        26 => b'[',
-        27 => b']',
+        16 => {
+            if uppercase {
+                b'Q'
+            } else {
+                b'q'
+            }
+        }
+        17 => {
+            if uppercase {
+                b'W'
+            } else {
+                b'w'
+            }
+        }
+        18 => {
+            if uppercase {
+                b'E'
+            } else {
+                b'e'
+            }
+        }
+        19 => {
+            if uppercase {
+                b'R'
+            } else {
+                b'r'
+            }
+        }
+        20 => {
+            if uppercase {
+                b'T'
+            } else {
+                b't'
+            }
+        }
+        21 => {
+            if uppercase {
+                b'Y'
+            } else {
+                b'y'
+            }
+        }
+        22 => {
+            if uppercase {
+                b'U'
+            } else {
+                b'u'
+            }
+        }
+        23 => {
+            if uppercase {
+                b'I'
+            } else {
+                b'i'
+            }
+        }
+        24 => {
+            if uppercase {
+                b'O'
+            } else {
+                b'o'
+            }
+        }
+        25 => {
+            if uppercase {
+                b'P'
+            } else {
+                b'p'
+            }
+        }
+        26 => {
+            if shifted {
+                b'{'
+            } else {
+                b'['
+            }
+        }
+        27 => {
+            if shifted {
+                b'}'
+            } else {
+                b']'
+            }
+        }
         28 => b'\n',
-        30 => b'a',
-        31 => b's',
-        32 => b'd',
-        33 => b'f',
-        34 => b'g',
-        35 => b'h',
-        36 => b'j',
-        37 => b'k',
-        38 => b'l',
-        39 => b';',
-        40 => b'\'',
-        41 => b'`',
-        43 => b'\\',
-        44 => b'z',
-        45 => b'x',
-        46 => b'c',
-        47 => b'v',
-        48 => b'b',
-        49 => b'n',
-        50 => b'm',
-        51 => b',',
-        52 => b'.',
-        53 => b'/',
+        30 => {
+            if uppercase {
+                b'A'
+            } else {
+                b'a'
+            }
+        }
+        31 => {
+            if uppercase {
+                b'S'
+            } else {
+                b's'
+            }
+        }
+        32 => {
+            if uppercase {
+                b'D'
+            } else {
+                b'd'
+            }
+        }
+        33 => {
+            if uppercase {
+                b'F'
+            } else {
+                b'f'
+            }
+        }
+        34 => {
+            if uppercase {
+                b'G'
+            } else {
+                b'g'
+            }
+        }
+        35 => {
+            if uppercase {
+                b'H'
+            } else {
+                b'h'
+            }
+        }
+        36 => {
+            if uppercase {
+                b'J'
+            } else {
+                b'j'
+            }
+        }
+        37 => {
+            if uppercase {
+                b'K'
+            } else {
+                b'k'
+            }
+        }
+        38 => {
+            if uppercase {
+                b'L'
+            } else {
+                b'l'
+            }
+        }
+        39 => {
+            if shifted {
+                b':'
+            } else {
+                b';'
+            }
+        }
+        40 => {
+            if shifted {
+                b'"'
+            } else {
+                b'\''
+            }
+        }
+        41 => {
+            if shifted {
+                b'~'
+            } else {
+                b'`'
+            }
+        }
+        43 => {
+            if shifted {
+                b'|'
+            } else {
+                b'\\'
+            }
+        }
+        44 => {
+            if uppercase {
+                b'Z'
+            } else {
+                b'z'
+            }
+        }
+        45 => {
+            if uppercase {
+                b'X'
+            } else {
+                b'x'
+            }
+        }
+        46 => {
+            if uppercase {
+                b'C'
+            } else {
+                b'c'
+            }
+        }
+        47 => {
+            if uppercase {
+                b'V'
+            } else {
+                b'v'
+            }
+        }
+        48 => {
+            if uppercase {
+                b'B'
+            } else {
+                b'b'
+            }
+        }
+        49 => {
+            if uppercase {
+                b'N'
+            } else {
+                b'n'
+            }
+        }
+        50 => {
+            if uppercase {
+                b'M'
+            } else {
+                b'm'
+            }
+        }
+        51 => {
+            if shifted {
+                b'<'
+            } else {
+                b','
+            }
+        }
+        52 => {
+            if shifted {
+                b'>'
+            } else {
+                b'.'
+            }
+        }
+        53 => {
+            if shifted {
+                b'?'
+            } else {
+                b'/'
+            }
+        }
         57 => b' ',
         _ => {
             return match linux_key_code {
                 14 => Some(vec![0x7f]),
+                102 => Some(b"\x1b[H".to_vec()),
+                107 => Some(b"\x1b[F".to_vec()),
                 103 => Some(b"\x1b[A".to_vec()),
                 108 => Some(b"\x1b[B".to_vec()),
                 105 => Some(b"\x1b[D".to_vec()),

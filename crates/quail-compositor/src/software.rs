@@ -50,6 +50,9 @@ pub fn compose_scene(state: &mut CompositorState) -> SoftwareFrame {
     });
 
     for surface in ordered_surfaces {
+        if surface.workspace != state.active_workspace {
+            continue;
+        }
         if let Some(buffer) = &surface.committed_buffer {
             paint_window_frame(
                 &mut pixels,
@@ -65,6 +68,20 @@ pub fn compose_scene(state: &mut CompositorState) -> SoftwareFrame {
     }
 
     paint_builtin_terminal(&mut pixels, width, height, state);
+    {
+        let mut canvas = Canvas {
+            pixels: &mut pixels,
+            width,
+            height,
+        };
+        if state.quick_settings_open {
+            paint_quick_settings(&mut canvas, state);
+        }
+        if state.power_menu_open {
+            paint_power_menu(&mut canvas, state);
+        }
+        paint_notifications(&mut canvas, state);
+    }
 
     if state.cursor_visible {
         let mut canvas = Canvas {
@@ -426,6 +443,7 @@ fn paint_launcher_surface(canvas: &mut Canvas<'_>, state: &CompositorState) {
 fn paint_bottom_panel(canvas: &mut Canvas<'_>, state: &CompositorState) {
     let panel_height = 54;
     let panel_y = canvas.height.saturating_sub(panel_height);
+    let (clock, date) = current_clock_strings();
     canvas.fill_rect(0, panel_y, canvas.width, panel_height, 0xEE131821);
     canvas.fill_rect(0, panel_y, canvas.width, 1, 0xFF2B3240);
     canvas.fill_rounded_rect(
@@ -459,23 +477,93 @@ fn paint_bottom_panel(canvas: &mut Canvas<'_>, state: &CompositorState) {
         canvas.icon(&entry.icon_name, icon_x + 5, panel_y + 14, 26, 26);
     }
 
-    let mut indicator_x = canvas.width.saturating_sub(250);
-    for _ in 0..8 {
-        canvas.fill_rounded_rect(indicator_x, panel_y + 18, 16, 16, 5, 0xFF697789);
-        indicator_x += 26;
+    for workspace in 0..state.workspace_count {
+        let pill_x = 392 + workspace * 42;
+        canvas.fill_rounded_rect(
+            pill_x,
+            panel_y + 11,
+            34,
+            30,
+            10,
+            if workspace == state.active_workspace {
+                0xFF274565
+            } else {
+                0xFF1C2330
+            },
+        );
+        canvas.text(
+            (pill_x + 13) as f32,
+            (panel_y + 31) as f32,
+            14.0,
+            if workspace == state.active_workspace {
+                0xFFF2F6FA
+            } else {
+                0xFFA8B4C2
+            },
+            &(workspace + 1).to_string(),
+        );
     }
+
+    let quick_settings_x = canvas.width.saturating_sub(206);
+    canvas.fill_rounded_rect(
+        quick_settings_x,
+        panel_y + 10,
+        74,
+        32,
+        10,
+        if state.quick_settings_open {
+            0xFF263B53
+        } else {
+            0xFF202631
+        },
+    );
+    canvas.text(
+        (quick_settings_x + 16) as f32,
+        (panel_y + 31) as f32,
+        14.0,
+        0xFFD5DFE9,
+        "Tools",
+    );
+
+    let power_x = canvas.width.saturating_sub(116);
+    canvas.fill_rounded_rect(
+        power_x,
+        panel_y + 10,
+        44,
+        32,
+        10,
+        if state.power_menu_open {
+            0xFF4A2C31
+        } else {
+            0xFF282027
+        },
+    );
+    canvas.text(
+        (power_x + 14) as f32,
+        (panel_y + 31) as f32,
+        14.0,
+        0xFFF0D7DB,
+        "P",
+    );
     canvas.text(
         (canvas.width.saturating_sub(92)) as f32,
-        (panel_y + 34) as f32,
+        (panel_y + 25) as f32,
         18.0,
         0xFFD8E0EA,
-        "10:42",
+        &clock,
+    );
+    canvas.text(
+        (canvas.width.saturating_sub(122)) as f32,
+        (panel_y + 40) as f32,
+        12.0,
+        0x889FB0C2,
+        &date,
     );
 }
 
 fn paint_builtin_terminal(frame: &mut [u32], width: usize, height: usize, state: &CompositorState) {
     let terminal = state.terminal.snapshot();
-    if !terminal.visible {
+    if !terminal.visible || terminal.workspace != state.active_workspace {
         return;
     }
 
@@ -558,6 +646,13 @@ fn paint_builtin_terminal(frame: &mut [u32], width: usize, height: usize, state:
         &terminal.title,
     );
     canvas.text(
+        (x + terminal_width.saturating_sub(164)) as f32,
+        (y + 28) as f32,
+        13.0,
+        0x88B5C4D4,
+        &format!("Workspace {}", terminal.workspace + 1),
+    );
+    canvas.text(
         (close_button_x + 5) as f32,
         (close_button_y + 14) as f32,
         14.0,
@@ -585,6 +680,21 @@ fn paint_builtin_terminal(frame: &mut [u32], width: usize, height: usize, state:
         let caret_y = y + title_height + 15 + caret_row * line_height;
         canvas.fill_rect(x + 18, caret_y, 2, 16, 0xFF8CE36D);
     }
+
+    canvas.fill_rect(
+        x + 12,
+        y + terminal_height.saturating_sub(28),
+        terminal_width.saturating_sub(24),
+        1,
+        0xFF232C38,
+    );
+    canvas.text(
+        (x + 18) as f32,
+        (y + terminal_height.saturating_sub(10)) as f32,
+        13.0,
+        0x889AB0A0,
+        "Shell: PTY session  |  Enter commands, arrows, tab, backspace, shift",
+    );
 }
 
 fn paint_cursor(canvas: &mut Canvas<'_>, cursor_x: f32, cursor_y: f32) {
@@ -689,6 +799,13 @@ fn paint_window_frame(
         if focused { 0xFFDFE6F1 } else { 0xAAB5C0CD },
         &surface.window_title,
     );
+    canvas.text(
+        (x + window_width.saturating_sub(86)) as f32,
+        (y + 24) as f32,
+        12.0,
+        0x889AA7B4,
+        &format!("WS {}", surface.workspace + 1),
+    );
 }
 
 fn paint_cloud(canvas: &mut Canvas<'_>, center_x: i32, center_y: i32, radius: i32, color: u32) {
@@ -700,4 +817,178 @@ fn paint_cloud(canvas: &mut Canvas<'_>, center_x: i32, center_y: i32, radius: i3
 fn clip_terminal_line(line: &str, content_width: usize) -> String {
     let max_chars = (content_width / 8).max(1);
     line.chars().take(max_chars).collect()
+}
+
+fn paint_quick_settings(canvas: &mut Canvas<'_>, state: &CompositorState) {
+    let panel_x = canvas.width.saturating_sub(286);
+    let panel_y = canvas.height.saturating_sub(270);
+    let rows = [
+        (
+            "Wi-Fi",
+            if state.wifi_enabled { "On" } else { "Off" },
+            if state.wifi_enabled {
+                0xFF4CBF8A
+            } else {
+                0xFF3A4554
+            },
+        ),
+        (
+            "Bluetooth",
+            if state.bluetooth_enabled { "On" } else { "Off" },
+            if state.bluetooth_enabled {
+                0xFF59B6FF
+            } else {
+                0xFF3A4554
+            },
+        ),
+        (
+            "Night Light",
+            if state.night_light_enabled {
+                "On"
+            } else {
+                "Off"
+            },
+            if state.night_light_enabled {
+                0xFFFFB86B
+            } else {
+                0xFF3A4554
+            },
+        ),
+        (
+            "Brightness",
+            &format!("{}%", state.brightness_level),
+            0xFFB38CFF,
+        ),
+        ("Volume", &format!("{}%", state.volume_level), 0xFFE58A95),
+    ];
+    canvas.fill_rounded_rect(panel_x + 10, panel_y + 12, 268, 208, 22, 0x4410141D);
+    canvas.fill_rounded_rect(panel_x, panel_y, 268, 208, 20, 0xF2141820);
+    canvas.text(
+        (panel_x + 18) as f32,
+        (panel_y + 28) as f32,
+        18.0,
+        0xFFE4EAF2,
+        "Quick Settings",
+    );
+    for (index, (label, value, accent)) in rows.iter().enumerate() {
+        let item_y = panel_y + 52 + index * 34;
+        canvas.fill_rounded_rect(panel_x + 14, item_y, 240, 26, 9, 0xFF1A222D);
+        canvas.fill_rounded_rect(panel_x + 18, item_y + 5, 16, 16, 6, *accent);
+        canvas.text(
+            (panel_x + 42) as f32,
+            (item_y + 19) as f32,
+            14.0,
+            0xFFD8E0EA,
+            label,
+        );
+        canvas.text(
+            (panel_x + 190) as f32,
+            (item_y + 19) as f32,
+            13.0,
+            0x88B0BFCE,
+            value,
+        );
+    }
+}
+
+fn paint_power_menu(canvas: &mut Canvas<'_>, state: &CompositorState) {
+    let panel_x = canvas.width.saturating_sub(224);
+    let panel_y = canvas.height.saturating_sub(246);
+    let actions = ["Lock", "Log Out", "Restart", "Shut Down"];
+    canvas.fill_rounded_rect(panel_x + 8, panel_y + 10, 196, 212, 22, 0x4410141D);
+    canvas.fill_rounded_rect(panel_x, panel_y, 196, 212, 20, 0xF218161B);
+    canvas.text(
+        (panel_x + 18) as f32,
+        (panel_y + 28) as f32,
+        18.0,
+        0xFFEADCE0,
+        "Power",
+    );
+    for (index, action) in actions.iter().enumerate() {
+        let item_y = panel_y + 48 + index * 38;
+        canvas.fill_rounded_rect(
+            panel_x + 14,
+            item_y,
+            164,
+            28,
+            10,
+            if *action == "Shut Down" {
+                0xFF332127
+            } else {
+                0xFF1D222C
+            },
+        );
+        canvas.text(
+            (panel_x + 28) as f32,
+            (item_y + 20) as f32,
+            15.0,
+            if *action == "Shut Down" {
+                0xFFF0D7DB
+            } else {
+                0xFFD8E0EA
+            },
+            action,
+        );
+    }
+    canvas.text(
+        (panel_x + 18) as f32,
+        (panel_y + 194) as f32,
+        12.0,
+        0x889FB0C2,
+        &format!("Workspace {}", state.active_workspace + 1),
+    );
+}
+
+fn paint_notifications(canvas: &mut Canvas<'_>, state: &CompositorState) {
+    for (index, notification) in state.notifications.iter().rev().take(3).enumerate() {
+        let toast_y = 22 + index * 58;
+        let toast_x = canvas.width.saturating_sub(344);
+        canvas.fill_rounded_rect(toast_x + 10, toast_y + 8, 300, 48, 18, 0x33101620);
+        canvas.fill_rounded_rect(toast_x, toast_y, 300, 48, 16, 0xE5151A22);
+        canvas.fill_rounded_rect(toast_x + 14, toast_y + 14, 10, 20, 5, 0xFF4CBF8A);
+        canvas.text(
+            (toast_x + 34) as f32,
+            (toast_y + 20) as f32,
+            14.0,
+            0xFFDDE5EE,
+            "QuailDE",
+        );
+        canvas.text(
+            (toast_x + 34) as f32,
+            (toast_y + 36) as f32,
+            13.0,
+            0x88C4D0DA,
+            notification,
+        );
+    }
+}
+
+fn current_clock_strings() -> (String, String) {
+    let mut now = 0_i64;
+    let mut local_time = libc::tm {
+        tm_sec: 0,
+        tm_min: 0,
+        tm_hour: 0,
+        tm_mday: 0,
+        tm_mon: 0,
+        tm_year: 0,
+        tm_wday: 0,
+        tm_yday: 0,
+        tm_isdst: 0,
+        tm_gmtoff: 0,
+        tm_zone: std::ptr::null_mut(),
+    };
+    unsafe {
+        libc::time(&mut now);
+        libc::localtime_r(&now, &mut local_time);
+    }
+    (
+        format!("{:02}:{:02}", local_time.tm_hour, local_time.tm_min),
+        format!(
+            "{:02}/{:02}/{}",
+            local_time.tm_mday,
+            local_time.tm_mon + 1,
+            local_time.tm_year + 1900
+        ),
+    )
 }

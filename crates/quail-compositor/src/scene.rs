@@ -73,6 +73,7 @@ pub struct SurfaceSlots {
 #[derive(Debug, Clone, Default)]
 pub struct SceneSurface {
     pub object_id: u32,
+    pub workspace: usize,
     pub x: i32,
     pub y: i32,
     pub window_title: String,

@@ -64,6 +64,8 @@ pub fn compose_scene(state: &mut CompositorState) -> SoftwareFrame {
         }
     }
 
+    paint_builtin_terminal(&mut pixels, width, height, state);
+
     if state.cursor_visible {
         let mut canvas = Canvas {
             pixels: &mut pixels,
@@ -471,6 +473,120 @@ fn paint_bottom_panel(canvas: &mut Canvas<'_>, state: &CompositorState) {
     );
 }
 
+fn paint_builtin_terminal(frame: &mut [u32], width: usize, height: usize, state: &CompositorState) {
+    let terminal = state.terminal.snapshot();
+    if !terminal.visible {
+        return;
+    }
+
+    let x = terminal.x.max(16) as usize;
+    let y = terminal.y.max(16) as usize;
+    let terminal_width = terminal.width.max(420) as usize;
+    let terminal_height = terminal.height.max(240) as usize;
+    let title_height = 42;
+    let close_button_x = x + terminal_width.saturating_sub(28);
+    let close_button_y = y + 10;
+    let content_width = terminal_width.saturating_sub(24);
+    let available_content_height = terminal_height.saturating_sub(title_height + 24);
+    let line_height = 19;
+    let visible_line_count = available_content_height / line_height;
+    let lines = terminal
+        .lines
+        .iter()
+        .rev()
+        .take(visible_line_count.max(1))
+        .cloned()
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect::<Vec<_>>();
+
+    let mut canvas = Canvas {
+        pixels: frame,
+        width,
+        height,
+    };
+
+    // The built-in terminal is painted as a real content surface with live PTY
+    // text so the shell is no longer only launcher and panel rectangles.
+    canvas.fill_rounded_rect(
+        x.saturating_add(10),
+        y.saturating_add(14),
+        terminal_width,
+        terminal_height,
+        20,
+        0x44101720,
+    );
+    canvas.fill_rounded_rect(x, y, terminal_width, terminal_height, 18, 0xF611141A);
+    canvas.fill_rounded_rect(
+        x.saturating_add(1),
+        y.saturating_add(1),
+        terminal_width.saturating_sub(2),
+        title_height,
+        18,
+        if terminal.focused {
+            0xFF1B2430
+        } else {
+            0xFF171E27
+        },
+    );
+    canvas.fill_rect(
+        x.saturating_add(1),
+        y + title_height,
+        terminal_width.saturating_sub(2),
+        1,
+        0xFF293240,
+    );
+    canvas.fill_rounded_rect(
+        x.saturating_add(12),
+        y + title_height + 12,
+        terminal_width.saturating_sub(24),
+        terminal_height.saturating_sub(title_height + 24),
+        12,
+        0xFF0A0E13,
+    );
+    canvas.fill_rounded_rect(close_button_x, close_button_y, 18, 18, 9, 0xFF4A2028);
+    canvas.text(
+        (x + 18) as f32,
+        (y + 28) as f32,
+        16.0,
+        if terminal.focused {
+            0xFFF3F6FA
+        } else {
+            0xFFC3CCD7
+        },
+        &terminal.title,
+    );
+    canvas.text(
+        (close_button_x + 5) as f32,
+        (close_button_y + 14) as f32,
+        14.0,
+        0xFFF4D9DD,
+        "x",
+    );
+
+    for (index, line) in lines.iter().enumerate() {
+        let baseline_y = y + title_height + 28 + index * line_height;
+        if baseline_y >= y + terminal_height.saturating_sub(10) {
+            break;
+        }
+        let clipped = clip_terminal_line(line, content_width);
+        canvas.text(
+            (x + 18) as f32,
+            baseline_y as f32,
+            16.0,
+            0xFFD8E7D3,
+            &clipped,
+        );
+    }
+
+    if terminal.focused {
+        let caret_row = lines.len().saturating_sub(1);
+        let caret_y = y + title_height + 15 + caret_row * line_height;
+        canvas.fill_rect(x + 18, caret_y, 2, 16, 0xFF8CE36D);
+    }
+}
+
 fn paint_cursor(canvas: &mut Canvas<'_>, cursor_x: f32, cursor_y: f32) {
     if let Some(cursor) = themed_cursor() {
         let draw_x = cursor_x - cursor.hotspot_x as f32;
@@ -579,4 +695,9 @@ fn paint_cloud(canvas: &mut Canvas<'_>, center_x: i32, center_y: i32, radius: i3
     canvas.glow(center_x - radius / 2, center_y, radius, color);
     canvas.glow(center_x + radius / 3, center_y - radius / 5, radius, color);
     canvas.glow(center_x, center_y + radius / 4, radius, color);
+}
+
+fn clip_terminal_line(line: &str, content_width: usize) -> String {
+    let max_chars = (content_width / 8).max(1);
+    line.chars().take(max_chars).collect()
 }

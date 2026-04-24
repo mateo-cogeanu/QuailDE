@@ -141,7 +141,7 @@ fn launch_startup_apps(state: &mut CompositorState) {
         return;
     };
 
-    if let Err(error) = spawn_app(&app, &state.listening_socket, &runtime_dir) {
+    if let Err(error) = launch_app(state, &app, &runtime_dir) {
         state.last_launch_error = format!("{}: {error}", app.name);
         return;
     }
@@ -160,13 +160,29 @@ fn launch_pending_app(state: &mut CompositorState) {
     };
     let runtime_dir = PathBuf::from(runtime_dir);
     if let Some(app) = state.installed_apps.get(index).cloned() {
-        if let Err(error) = spawn_app(&app, &state.listening_socket, &runtime_dir) {
+        if let Err(error) = launch_app(state, &app, &runtime_dir) {
             state.last_launch_error = format!("{}: {error}", app.name);
         } else {
             state.last_launched_app = app.name;
             state.last_launch_error = "none".to_string();
         }
     }
+}
+
+/// launch_app keeps QuailDE's built-in terminal on the same launch path as
+/// normal installed apps so the shell can offer a usable terminal everywhere.
+fn launch_app(
+    state: &mut CompositorState,
+    app: &crate::apps::DesktopApp,
+    runtime_dir: &PathBuf,
+) -> Result<()> {
+    if crate::terminal::BuiltinTerminalState::is_builtin_terminal_command(&app.command) {
+        state.terminal.ensure_started()?;
+        state.terminal.show();
+        return Ok(());
+    }
+
+    spawn_app(app, &state.listening_socket, runtime_dir)
 }
 
 fn accept_clients(

@@ -12,3 +12,4 @@ pub mod scene;
 pub mod shell;
 pub mod software;
 pub mod state;
+pub mod terminal;

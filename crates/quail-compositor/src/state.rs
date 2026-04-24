@@ -4,6 +4,7 @@ use crate::launcher::LauncherModel;
 use crate::output::OutputState;
 use crate::scene::SceneGraph;
 use crate::shell::ShellSurfaceState;
+use crate::terminal::BuiltinTerminalState;
 use wayland_server::Resource;
 use wayland_server::protocol::{
     wl_keyboard::{KeyState as KeyboardKeyState, WlKeyboard},
@@ -78,6 +79,7 @@ pub struct CompositorState {
     pub cursor_target_y: f32,
     pub cursor_visible: bool,
     pub launcher_open: bool,
+    pub terminal: BuiltinTerminalState,
     pub focused_surface_id: Option<u32>,
     pub pointer_focus_surface_id: Option<u32>,
     pub dragging_surface_id: Option<u32>,
@@ -159,6 +161,7 @@ impl CompositorState {
             cursor_target_y: 96.0,
             cursor_visible: true,
             launcher_open: false,
+            terminal: BuiltinTerminalState::new(),
             focused_surface_id: None,
             pointer_focus_surface_id: None,
             dragging_surface_id: None,
@@ -268,6 +271,7 @@ impl CompositorState {
             format!("  cursor position: {},{}", self.cursor_x, self.cursor_y),
             format!("  cursor visible: {}", self.cursor_visible),
             format!("  launcher open: {}", self.launcher_open),
+            format!("  terminal visible: {}", self.terminal.snapshot().visible),
             format!(
                 "  focused surface: {}",
                 self.focused_surface_id
@@ -312,8 +316,8 @@ impl CompositorState {
         self.clamp_cursor();
     }
 
-    /// move_cursor_absolute eases absolute-pointer devices toward their target
-    /// so VM tablet input feels more like a real desktop cursor than a grid.
+    /// move_cursor_absolute maps absolute-pointer devices directly onto the
+    /// output space so VM tablets follow the hand without added cursor lag.
     pub fn move_cursor_absolute(&mut self, target_x: f32, target_y: f32) {
         self.cursor_target_x = target_x;
         self.cursor_target_y = target_y;
@@ -531,25 +535,40 @@ impl CompositorState {
     pub fn handle_shell_click(&mut self) -> bool {
         if self.menu_button_at_cursor() {
             self.launcher_open = !self.launcher_open;
+            self.terminal.unfocus();
             return true;
         }
         if let Some(index) = self.launcher_section_at_cursor() {
             self.launcher_selected_section = index;
             return true;
         }
+        if self.terminal.close_button_hit(self.cursor_x, self.cursor_y) {
+            self.terminal.hide();
+            return true;
+        }
+        if self
+            .terminal
+            .focus_if_contains(self.cursor_x, self.cursor_y)
+        {
+            self.focused_surface_id = None;
+            return true;
+        }
         if let Some(index) = self.launcher_app_at_cursor() {
             self.pending_launch = Some(index);
             self.launcher_open = false;
+            self.terminal.unfocus();
             return true;
         }
         if let Some(index) = self.panel_app_at_cursor() {
             self.pending_launch = Some(index);
+            self.terminal.unfocus();
             return true;
         }
         if self.launcher_open && !self.launcher_bounds_contains() {
             self.launcher_open = false;
             return true;
         }
+        self.terminal.unfocus();
         false
     }
 
@@ -676,5 +695,12 @@ impl CompositorState {
     fn next_serial(&mut self) -> u32 {
         self.next_serial = self.next_serial.wrapping_add(1).max(1);
         self.next_serial
+    }
+
+    /// route_terminal_key forwards raw Linux key codes to the built-in shell
+    /// terminal before client routing, giving QuailDE a fallback terminal app
+    /// even when no external graphical terminal is present yet.
+    pub fn route_terminal_key(&mut self, linux_key_code: u32, pressed: bool) -> bool {
+        self.terminal.handle_key_event(linux_key_code, pressed)
     }
 }

@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-04-24
+- Added a built-in PTY-backed `Quail Terminal` so QuailDE can launch and focus a real first-party terminal surface from the panel and launcher even on minimal Linux installs without a working external Wayland terminal.
+- Routed Linux keyboard input through the built-in terminal before focused clients when the terminal has focus, and painted the terminal as live shell text instead of another static shell placeholder so QuailDE relies less on decorative rectangle-only UI.
+
 ## 2026-04-21
 - Added a repo-local workflow in `AGENTS.md` to keep code comments, changelog updates, and GitHub pushes top of mind for every change.
 - Created `CHANGELOG.md` so each future change has a dedicated place to be recorded.

@@ -34,6 +34,19 @@ pub fn discover_system_apps() -> Vec<DesktopApp> {
     let mut discovered = Vec::<DesktopApp>::new();
     let mut seen = BTreeSet::<(String, String)>::new();
 
+    let builtin_terminal = DesktopApp {
+        name: "Quail Terminal".to_string(),
+        command: crate::terminal::BuiltinTerminalState::builtin_command_name().to_string(),
+        args: Vec::new(),
+        category: AppCategory::Terminal,
+        icon_name: "utilities-terminal".to_string(),
+    };
+    seen.insert((
+        builtin_terminal.name.clone(),
+        builtin_terminal.command.clone(),
+    ));
+    discovered.push(builtin_terminal);
+
     for app in discover_desktop_entries() {
         let key = (app.name.clone(), app.command.clone());
         if seen.insert(key) {

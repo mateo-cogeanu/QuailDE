@@ -292,9 +292,7 @@ impl CompositorState {
 
     /// move_cursor_absolute eases absolute-pointer devices toward their target
     /// so VM tablet input feels more like a real desktop cursor than a grid.
-    pub fn move_cursor_absolute(&mut self, target_x: i32, target_y: i32) {
-        let target_x = target_x as f32;
-        let target_y = target_y as f32;
+    pub fn move_cursor_absolute(&mut self, target_x: f32, target_y: f32) {
         self.cursor_x_precise += (target_x - self.cursor_x_precise) * 0.55;
         self.cursor_y_precise += (target_y - self.cursor_y_precise) * 0.55;
         self.clamp_cursor();

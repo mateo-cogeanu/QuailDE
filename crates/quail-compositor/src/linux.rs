@@ -473,9 +473,9 @@ mod platform {
                     device.abs_x_min,
                     device.abs_x_max,
                     state.composed_width,
-                    state.cursor_x,
+                    state.cursor_x_precise,
                 );
-                state.move_cursor_absolute(target_x, state.cursor_y);
+                state.move_cursor_absolute(target_x, state.cursor_y_precise);
             }
             (EV_ABS, ABS_Y, value) => {
                 update_axis_range(&mut device.abs_y_min, &mut device.abs_y_max, value);
@@ -484,9 +484,9 @@ mod platform {
                     device.abs_y_min,
                     device.abs_y_max,
                     state.composed_height,
-                    state.cursor_y,
+                    state.cursor_y_precise,
                 );
-                state.move_cursor_absolute(state.cursor_x, target_y);
+                state.move_cursor_absolute(state.cursor_x_precise, target_y);
             }
             (EV_KEY, BTN_LEFT, 1) => {
                 state.pointer_buttons_pressed = 1;
@@ -543,19 +543,17 @@ mod platform {
         min: Option<i32>,
         max: Option<i32>,
         output_extent: i32,
-        fallback: i32,
-    ) -> i32 {
+        fallback: f32,
+    ) -> f32 {
         let Some(min) = min else { return fallback };
         let Some(max) = max else { return fallback };
         let span = max.saturating_sub(min);
         if span <= 8 {
             return fallback;
         }
-        let normalized = value.saturating_sub(min);
-        normalized
-            .saturating_mul(output_extent.saturating_sub(1).max(1))
-            .checked_div(span)
-            .unwrap_or(fallback)
+        let normalized = value.saturating_sub(min) as f32;
+        let extent = output_extent.saturating_sub(1).max(1) as f32;
+        normalized * extent / span as f32
     }
 
     pub fn create_linux_platform(

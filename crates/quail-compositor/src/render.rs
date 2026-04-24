@@ -133,6 +133,37 @@ impl<'a> Canvas<'a> {
         }
     }
 
+    /// image paints an ARGB bitmap into the frame, optionally with fractional
+    /// positioning so the cursor can move smoothly even on coarse VM tablets.
+    pub fn image(
+        &mut self,
+        pixels: &[u32],
+        image_width: usize,
+        image_height: usize,
+        x: f32,
+        y: f32,
+    ) {
+        if image_width == 0 || image_height == 0 {
+            return;
+        }
+        let base_x = x.floor() as i32;
+        let base_y = y.floor() as i32;
+        let frac_x = x - base_x as f32;
+        let frac_y = y - base_y as f32;
+
+        for src_y in 0..image_height {
+            for src_x in 0..image_width {
+                let pixel = pixels[src_y * image_width + src_x];
+                if pixel >> 24 == 0 {
+                    continue;
+                }
+                let draw_x = base_x + src_x as i32;
+                let draw_y = base_y + src_y as i32;
+                self.blend_pixel_fractional(draw_x, draw_y, frac_x, frac_y, pixel);
+            }
+        }
+    }
+
     /// glow adds a soft radial highlight to the wallpaper or shell chrome.
     pub fn glow(&mut self, center_x: i32, center_y: i32, radius: i32, color: u32) {
         let min_x = (center_x - radius).max(0) as usize;
@@ -203,6 +234,41 @@ impl<'a> Canvas<'a> {
         let green = (src_g * alpha + dst_g * inv_alpha) / 0xFF;
         let blue = (src_b * alpha + dst_b * inv_alpha) / 0xFF;
         *destination = 0xFF00_0000 | (red << 16) | (green << 8) | blue;
+    }
+
+    fn blend_pixel_fractional(
+        &mut self,
+        draw_x: i32,
+        draw_y: i32,
+        frac_x: f32,
+        frac_y: f32,
+        source: u32,
+    ) {
+        let weights = [
+            ((1.0 - frac_x) * (1.0 - frac_y), 0_i32, 0_i32),
+            (frac_x * (1.0 - frac_y), 1_i32, 0_i32),
+            ((1.0 - frac_x) * frac_y, 0_i32, 1_i32),
+            (frac_x * frac_y, 1_i32, 1_i32),
+        ];
+
+        for (weight, offset_x, offset_y) in weights {
+            if weight <= 0.0 {
+                continue;
+            }
+            let target_x = draw_x + offset_x;
+            let target_y = draw_y + offset_y;
+            if target_x < 0 || target_y < 0 {
+                continue;
+            }
+            let target_x = target_x as usize;
+            let target_y = target_y as usize;
+            if target_x >= self.width || target_y >= self.height {
+                continue;
+            }
+            let scaled_alpha = ((((source >> 24) & 0xFF) as f32) * weight).round() as u32;
+            let shaded = (scaled_alpha << 24) | (source & 0x00FF_FFFF);
+            self.blend_pixel(target_x, target_y, shaded);
+        }
     }
 }
 

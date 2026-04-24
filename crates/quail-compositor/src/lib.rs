@@ -1,5 +1,6 @@
 pub mod apps;
 pub mod backend;
+pub mod cursor;
 pub mod drm_output;
 pub mod launcher;
 pub mod linux;

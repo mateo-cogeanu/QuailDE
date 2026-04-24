@@ -4,6 +4,7 @@ use std::path::Path;
 use anyhow::{Context, Result};
 
 use crate::apps::AppCategory;
+use crate::cursor::themed_cursor;
 use crate::render::Canvas;
 use crate::scene::{BufferSnapshot, SceneSurface};
 use crate::state::CompositorState;
@@ -67,7 +68,7 @@ pub fn compose_scene(state: &mut CompositorState) -> SoftwareFrame {
             width,
             height,
         };
-        paint_cursor(&mut canvas, state.cursor_x, state.cursor_y);
+        paint_cursor(&mut canvas, state.cursor_x_precise, state.cursor_y_precise);
     }
 
     let checksum = pixels.iter().fold(0_u64, |acc, pixel| {
@@ -437,7 +438,14 @@ fn paint_bottom_panel(canvas: &mut Canvas<'_>, state: &CompositorState) {
     );
 }
 
-fn paint_cursor(canvas: &mut Canvas<'_>, cursor_x: i32, cursor_y: i32) {
+fn paint_cursor(canvas: &mut Canvas<'_>, cursor_x: f32, cursor_y: f32) {
+    if let Some(cursor) = themed_cursor() {
+        let draw_x = cursor_x - cursor.hotspot_x as f32;
+        let draw_y = cursor_y - cursor.hotspot_y as f32;
+        canvas.image(&cursor.pixels, cursor.width, cursor.height, draw_x, draw_y);
+        return;
+    }
+
     let cursor_pattern = [
         "SS................",
         "SXX...............",
@@ -459,8 +467,8 @@ fn paint_cursor(canvas: &mut Canvas<'_>, cursor_x: i32, cursor_y: i32) {
 
     for (row_index, row) in cursor_pattern.iter().enumerate() {
         for (col_index, cell) in row.chars().enumerate() {
-            let x = cursor_x.saturating_add(col_index as i32);
-            let y = cursor_y.saturating_add(row_index as i32);
+            let x = cursor_x.round() as i32 + col_index as i32;
+            let y = cursor_y.round() as i32 + row_index as i32;
             if x < 0 || y < 0 {
                 continue;
             }

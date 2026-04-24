@@ -15,3 +15,4 @@ libc = "0.2"
 memmap2 = "0.9"
 wayland-server = "0.31.13"
 wayland-protocols = { version = "0.32.12", features = ["server"] }
+xcursor = "0.3"

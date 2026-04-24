@@ -1,8 +1,10 @@
 use std::fs::File;
+use std::os::fd::AsFd;
 use std::sync::{Arc, Mutex};
 
 use anyhow::Context;
 use memmap2::MmapOptions;
+use tempfile::tempfile;
 use wayland_protocols::xdg::shell::server::{
     xdg_popup::XdgPopup, xdg_positioner::XdgPositioner, xdg_surface::XdgSurface,
     xdg_toplevel::XdgToplevel, xdg_wm_base::XdgWmBase,
@@ -348,10 +350,16 @@ impl Dispatch<WlSeat, SeatGlobal> for CompositorState {
             }
             wayland_server::protocol::wl_seat::Request::GetKeyboard { id } => {
                 let keyboard = data_init.init(id, KeyboardState);
+                // Sending an explicit keyboard description gives GTK clients a
+                // better chance to treat the seat as usable instead of waiting
+                // forever for keyboard metadata that never arrives.
+                if keyboard.version() >= 4 {
+                    let _ = send_no_keymap(&keyboard);
+                }
                 keyboard.repeat_info(25, 600);
-                let _ = KeymapFormat::NoKeymap;
                 state.keyboards_created += 1;
                 state.keyboard_enter_serial = 0;
+                state.keyboard_focus_surface_id = None;
                 state.last_input_focus_surface = "keyboard-awaiting-focus".to_string();
                 state.keyboard_resources.push(keyboard);
             }
@@ -753,4 +761,10 @@ fn send_xdg_toplevel_configure(
     toplevel.configure(1280, 720, Vec::new());
     surface.configure(serial);
     state.last_xdg_configure_serial = serial;
+}
+
+fn send_no_keymap(keyboard: &WlKeyboard) -> std::io::Result<()> {
+    let file = tempfile()?;
+    keyboard.keymap(KeymapFormat::NoKeymap, file.as_fd(), 0);
+    Ok(())
 }

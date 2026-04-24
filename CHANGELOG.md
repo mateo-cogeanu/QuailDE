@@ -7,6 +7,8 @@
 - Added the first everyday shell features around the compositor: workspace switching from the panel, launcher search typing, shell notifications, a quick-settings popover for common toggles, a simple power menu, and workspace-aware routing for newly created client surfaces.
 - Reworked shell theming around a dedicated `theme` module so the panel, launcher, terminal, window chrome, notifications, and overlays now share one cohesive dark palette instead of relying on scattered hard-coded colors.
 - Broadened launcher app coverage by classifying unknown desktop entries as launchable utility apps, recognizing `/usr/bin/env` desktop-entry wrappers, showing more launcher tiles at once, and letting `Enter` launch the first search result so installed apps are easier to start.
+- Made shell notifications expire automatically after one second so they behave like transient toasts instead of piling up on screen.
+- Fixed a compositor panic when dragging or focusing oversized windows by clamping drag bounds safely, and tightened keyboard-focus bookkeeping plus `wl_keyboard` setup so GTK apps do not immediately lose the Wayland connection as easily when focused.
 
 ## 2026-04-21
 - Added a repo-local workflow in `AGENTS.md` to keep code comments, changelog updates, and GitHub pushes top of mind for every change.

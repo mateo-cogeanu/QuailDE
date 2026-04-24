@@ -113,6 +113,7 @@ pub fn run_runtime(options: RuntimeOptions) -> Result<RuntimeReport> {
         if let Some(platform) = linux_platform.as_mut() {
             platform.tick(&mut state)?;
         }
+        state.expire_notifications();
         launch_pending_app(&mut state);
         display
             .flush_clients()

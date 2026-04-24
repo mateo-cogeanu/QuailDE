@@ -1038,7 +1038,7 @@ fn paint_notifications(canvas: &mut Canvas<'_>, state: &CompositorState) {
             (toast_y + 36) as f32,
             13.0,
             theme.text_muted,
-            notification,
+            &notification.message,
         );
     }
 }

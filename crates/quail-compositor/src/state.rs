@@ -5,6 +5,7 @@ use crate::output::OutputState;
 use crate::scene::SceneGraph;
 use crate::shell::ShellSurfaceState;
 use crate::terminal::BuiltinTerminalState;
+use std::time::{Duration, Instant};
 use wayland_server::Resource;
 use wayland_server::protocol::{
     wl_keyboard::{KeyState as KeyboardKeyState, WlKeyboard},
@@ -58,6 +59,7 @@ pub struct CompositorState {
     pub last_seat_name: String,
     pub pointer_enter_serial: u32,
     pub keyboard_enter_serial: u32,
+    pub keyboard_focus_surface_id: Option<u32>,
     pub last_input_focus_surface: String,
     pub input_events_processed: usize,
     pub last_input_event: String,
@@ -83,7 +85,7 @@ pub struct CompositorState {
     pub power_menu_open: bool,
     pub active_workspace: usize,
     pub workspace_count: usize,
-    pub notifications: Vec<String>,
+    pub notifications: Vec<NotificationEntry>,
     pub wifi_enabled: bool,
     pub bluetooth_enabled: bool,
     pub night_light_enabled: bool,
@@ -100,6 +102,14 @@ pub struct CompositorState {
     pub next_serial: u32,
     pub pointer_resources: Vec<WlPointer>,
     pub keyboard_resources: Vec<WlKeyboard>,
+}
+
+/// NotificationEntry stores shell toasts together with their birth time so the
+/// compositor can expire them automatically instead of leaving stale messages.
+#[derive(Debug, Clone)]
+pub struct NotificationEntry {
+    pub message: String,
+    pub created_at: Instant,
 }
 
 impl CompositorState {
@@ -147,6 +157,7 @@ impl CompositorState {
             last_seat_name: "seat0".to_string(),
             pointer_enter_serial: 0,
             keyboard_enter_serial: 0,
+            keyboard_focus_surface_id: None,
             last_input_focus_surface: "none".to_string(),
             input_events_processed: 0,
             last_input_event: "none".to_string(),
@@ -175,7 +186,10 @@ impl CompositorState {
             power_menu_open: false,
             active_workspace: 0,
             workspace_count: 4,
-            notifications: vec!["Welcome to QuailDE".to_string()],
+            notifications: vec![NotificationEntry {
+                message: "Welcome to QuailDE".to_string(),
+                created_at: Instant::now(),
+            }],
             wifi_enabled: true,
             bluetooth_enabled: false,
             night_light_enabled: false,
@@ -268,6 +282,12 @@ impl CompositorState {
             format!("  last seat name: {}", self.last_seat_name),
             format!("  pointer enter serial: {}", self.pointer_enter_serial),
             format!("  keyboard enter serial: {}", self.keyboard_enter_serial),
+            format!(
+                "  keyboard focus surface: {}",
+                self.keyboard_focus_surface_id
+                    .map(|id| format!("surface-{id}"))
+                    .unwrap_or_else(|| "none".to_string())
+            ),
             format!(
                 "  last input focus surface: {}",
                 self.last_input_focus_surface
@@ -434,11 +454,12 @@ impl CompositorState {
                 .saturating_sub(buffer.width)
                 .saturating_sub(12)
                 .max(0);
+            let min_x = 6.min(max_x);
             let max_y = output_height
                 .saturating_sub(buffer.height)
                 .saturating_sub(12)
                 .max(36);
-            surface.x = (self.cursor_x - self.drag_offset_x).clamp(6, max_x);
+            surface.x = (self.cursor_x - self.drag_offset_x).clamp(min_x, max_x);
             surface.y = (self.cursor_y - self.drag_offset_y).clamp(34, max_y);
             self.last_window_geometry = format!(
                 "surface-{} @ {},{} {}x{}",
@@ -828,15 +849,32 @@ impl CompositorState {
     /// route_keyboard_key forwards a raw Linux key code to the focused client.
     pub fn route_keyboard_key(&mut self, linux_key_code: u32, pressed: bool) {
         let Some(surface) = self.focused_surface() else {
+            if let Some(previous) = self.keyboard_focus_surface_resource() {
+                let serial = self.next_serial();
+                for keyboard in &self.keyboard_resources {
+                    keyboard.leave(serial, &previous);
+                }
+                self.keyboard_focus_surface_id = None;
+                self.keyboard_enter_serial = 0;
+            }
+            return;
+        };
+        let Some(surface_id) = self.focused_surface_id else {
             return;
         };
         let serial = self.next_serial();
-        if self.keyboard_enter_serial == 0 {
+        if self.keyboard_focus_surface_id != Some(surface_id) {
+            if let Some(previous) = self.keyboard_focus_surface_resource() {
+                for keyboard in &self.keyboard_resources {
+                    keyboard.leave(serial, &previous);
+                }
+            }
             for keyboard in &self.keyboard_resources {
                 keyboard.enter(serial, &surface, Vec::new());
                 keyboard.modifiers(serial, 0, 0, 0, 0);
             }
             self.keyboard_enter_serial = serial;
+            self.keyboard_focus_surface_id = Some(surface_id);
         }
         let key_state = if pressed {
             KeyboardKeyState::Pressed
@@ -856,6 +894,11 @@ impl CompositorState {
 
     fn pointer_focus_surface_resource(&self) -> Option<WlSurface> {
         let id = self.pointer_focus_surface_id?;
+        self.scene.surfaces.get(&id)?.resource.clone()
+    }
+
+    fn keyboard_focus_surface_resource(&self) -> Option<WlSurface> {
+        let id = self.keyboard_focus_surface_id?;
         self.scene.surfaces.get(&id)?.resource.clone()
     }
 
@@ -881,10 +924,21 @@ impl CompositorState {
     /// push_notification records a short shell message so launches, workspace
     /// switches, and power actions have visible user feedback in the desktop.
     pub fn push_notification(&mut self, message: impl Into<String>) {
-        self.notifications.push(message.into());
+        self.notifications.push(NotificationEntry {
+            message: message.into(),
+            created_at: Instant::now(),
+        });
         while self.notifications.len() > 4 {
             self.notifications.remove(0);
         }
+    }
+
+    /// expire_notifications keeps shell toasts short-lived so they behave like
+    /// transient desktop notifications instead of becoming permanent clutter.
+    pub fn expire_notifications(&mut self) {
+        let ttl = Duration::from_secs(1);
+        self.notifications
+            .retain(|notification| notification.created_at.elapsed() < ttl);
     }
 
     /// switch_workspace moves the shell to a different desktop and clears any

@@ -62,6 +62,8 @@ pub struct CompositorState {
     pub last_input_event: String,
     pub installed_apps: Vec<DesktopApp>,
     pub launcher: LauncherModel,
+    pub launcher_selected_section: usize,
+    pub launcher_search_query: String,
     pub pending_launch: Option<usize>,
     pub startup_apps_launched: usize,
     pub last_launched_app: String,
@@ -141,6 +143,8 @@ impl CompositorState {
                 sections: Vec::new(),
                 entries: Vec::new(),
             },
+            launcher_selected_section: 1,
+            launcher_search_query: String::new(),
             pending_launch: None,
             startup_apps_launched: 0,
             last_launched_app: "none".to_string(),
@@ -249,6 +253,10 @@ impl CompositorState {
             format!("  last input event: {}", self.last_input_event),
             format!("  discovered apps: {}", self.installed_apps.len()),
             format!("  launcher entries: {}", self.launcher.entries.len()),
+            format!(
+                "  launcher selected section: {}",
+                self.launcher_selected_section
+            ),
             format!("  startup apps launched: {}", self.startup_apps_launched),
             format!("  last launched app: {}", self.last_launched_app),
             format!("  last launch error: {}", self.last_launch_error),
@@ -309,22 +317,8 @@ impl CompositorState {
     pub fn move_cursor_absolute(&mut self, target_x: f32, target_y: f32) {
         self.cursor_target_x = target_x;
         self.cursor_target_y = target_y;
-        self.clamp_cursor();
-    }
-
-    /// animate_cursor_motion advances the visible cursor toward its target every
-    /// frame so sparse VM tablet events still produce smooth movement.
-    pub fn animate_cursor_motion(&mut self) {
-        let delta_x = self.cursor_target_x - self.cursor_x_precise;
-        let delta_y = self.cursor_target_y - self.cursor_y_precise;
-        self.cursor_x_precise += delta_x * 0.35;
-        self.cursor_y_precise += delta_y * 0.35;
-        if delta_x.abs() < 0.15 {
-            self.cursor_x_precise = self.cursor_target_x;
-        }
-        if delta_y.abs() < 0.15 {
-            self.cursor_y_precise = self.cursor_target_y;
-        }
+        self.cursor_x_precise = target_x;
+        self.cursor_y_precise = target_y;
         self.clamp_cursor();
     }
 
@@ -440,8 +434,7 @@ impl CompositorState {
         let cursor_x = self.cursor_x.max(0) as usize;
         let cursor_y = self.cursor_y.max(0) as usize;
 
-        self.launcher
-            .entries
+        self.visible_launcher_entries()
             .iter()
             .take(8)
             .enumerate()
@@ -453,6 +446,30 @@ impl CompositorState {
                 let inside_x = cursor_x >= tile_x && cursor_x < tile_x + 96;
                 let inside_y = cursor_y >= tile_y && cursor_y < tile_y + 102;
                 (inside_x && inside_y).then_some(entry.app_index)
+            })
+    }
+
+    /// launcher_section_at_cursor resolves the launcher sidebar row under the
+    /// cursor so the menu can switch categories like a normal DE launcher.
+    pub fn launcher_section_at_cursor(&self) -> Option<usize> {
+        if !self.launcher_open {
+            return None;
+        }
+        let height = self.composed_height.max(0) as usize;
+        let panel_height = height.min(620);
+        let panel_y = height.saturating_sub(panel_height + 78);
+        let cursor_x = self.cursor_x.max(0) as usize;
+        let cursor_y = self.cursor_y.max(0) as usize;
+        if cursor_x < 12 || cursor_x >= 244 {
+            return None;
+        }
+        self.launcher
+            .sections
+            .iter()
+            .enumerate()
+            .find_map(|(index, _section)| {
+                let item_y = panel_y + 74 + index * 52;
+                (cursor_y >= item_y && cursor_y < item_y + 44).then_some(index)
             })
     }
 
@@ -516,6 +533,10 @@ impl CompositorState {
             self.launcher_open = !self.launcher_open;
             return true;
         }
+        if let Some(index) = self.launcher_section_at_cursor() {
+            self.launcher_selected_section = index;
+            return true;
+        }
         if let Some(index) = self.launcher_app_at_cursor() {
             self.pending_launch = Some(index);
             self.launcher_open = false;
@@ -530,6 +551,28 @@ impl CompositorState {
             return true;
         }
         false
+    }
+
+    /// visible_launcher_entries returns the menu grid after section/search
+    /// filtering so the shell stops treating the launcher as a fixed mock list.
+    pub fn visible_launcher_entries(&self) -> Vec<&crate::launcher::LauncherEntry> {
+        let selected_category = self
+            .launcher
+            .sections
+            .get(self.launcher_selected_section)
+            .and_then(|section| section.category);
+        let query = self.launcher_search_query.to_ascii_lowercase();
+
+        self.launcher
+            .entries
+            .iter()
+            .filter(|entry| {
+                selected_category.is_none_or(|category| entry.category == category)
+                    && (query.is_empty()
+                        || entry.label.to_ascii_lowercase().contains(&query)
+                        || entry.subtitle.to_ascii_lowercase().contains(&query))
+            })
+            .collect()
     }
 
     /// route_pointer_motion emits wl_pointer focus and motion events to the

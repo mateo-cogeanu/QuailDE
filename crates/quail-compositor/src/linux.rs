@@ -24,6 +24,8 @@ mod platform {
     const EV_KEY: u16 = 0x01;
     const EV_REL: u16 = 0x02;
     const EV_ABS: u16 = 0x03;
+    const EV_SYN: u16 = 0x00;
+    const SYN_REPORT: u16 = 0x00;
     const REL_X: u16 = 0x00;
     const REL_Y: u16 = 0x01;
     const ABS_X: u16 = 0x00;
@@ -150,6 +152,8 @@ mod platform {
         abs_x_max: Option<i32>,
         abs_y_min: Option<i32>,
         abs_y_max: Option<i32>,
+        pending_abs_x: Option<i32>,
+        pending_abs_y: Option<i32>,
     }
 
     impl LinuxPlatform {
@@ -227,7 +231,6 @@ mod platform {
 
         pub fn tick(&mut self, state: &mut CompositorState) -> Result<()> {
             self.poll_input(state)?;
-            state.animate_cursor_motion();
             state.clamp_cursor();
             state.update_input_focus();
 
@@ -428,6 +431,8 @@ mod platform {
                 abs_x_max,
                 abs_y_min,
                 abs_y_max,
+                pending_abs_x: None,
+                pending_abs_y: None,
             });
         }
 
@@ -469,25 +474,43 @@ mod platform {
             (EV_REL, REL_Y, delta) => state.move_cursor_relative(0.0, delta as f32),
             (EV_ABS, ABS_X, value) => {
                 update_axis_range(&mut device.abs_x_min, &mut device.abs_x_max, value);
-                let target_x = map_absolute_axis(
-                    value,
-                    device.abs_x_min,
-                    device.abs_x_max,
-                    state.composed_width,
-                    state.cursor_x_precise,
-                );
-                state.move_cursor_absolute(target_x, state.cursor_y_precise);
+                device.pending_abs_x = Some(value);
             }
             (EV_ABS, ABS_Y, value) => {
                 update_axis_range(&mut device.abs_y_min, &mut device.abs_y_max, value);
-                let target_y = map_absolute_axis(
-                    value,
-                    device.abs_y_min,
-                    device.abs_y_max,
-                    state.composed_height,
-                    state.cursor_y_precise,
-                );
-                state.move_cursor_absolute(state.cursor_x_precise, target_y);
+                device.pending_abs_y = Some(value);
+            }
+            // Absolute-pointer devices deliver X and Y independently and expect
+            // the compositor to apply the pair on SYN_REPORT. Updating on each
+            // axis event makes VM tablet mice feel blocky and incorrect.
+            (EV_SYN, SYN_REPORT, _) => {
+                if device.pending_abs_x.is_some() || device.pending_abs_y.is_some() {
+                    let target_x = device
+                        .pending_abs_x
+                        .map_or(state.cursor_x_precise, |value| {
+                            map_absolute_axis(
+                                value,
+                                device.abs_x_min,
+                                device.abs_x_max,
+                                state.composed_width,
+                                state.cursor_x_precise,
+                            )
+                        });
+                    let target_y = device
+                        .pending_abs_y
+                        .map_or(state.cursor_y_precise, |value| {
+                            map_absolute_axis(
+                                value,
+                                device.abs_y_min,
+                                device.abs_y_max,
+                                state.composed_height,
+                                state.cursor_y_precise,
+                            )
+                        });
+                    state.move_cursor_absolute(target_x, target_y);
+                    device.pending_abs_x = None;
+                    device.pending_abs_y = None;
+                }
             }
             (EV_KEY, BTN_LEFT, 1) => {
                 state.pointer_buttons_pressed = 1;

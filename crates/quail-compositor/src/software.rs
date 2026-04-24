@@ -219,6 +219,7 @@ fn paint_launcher_surface(canvas: &mut Canvas<'_>, state: &CompositorState) {
     let panel_x = 18;
     let panel_y = canvas.height.saturating_sub(panel_height + 78);
     let sidebar_width = 256;
+    let visible_entries = state.visible_launcher_entries();
 
     canvas.fill_rounded_rect(
         panel_x + 8,
@@ -287,7 +288,7 @@ fn paint_launcher_surface(canvas: &mut Canvas<'_>, state: &CompositorState) {
 
     for (index, section) in state.launcher.sections.iter().enumerate() {
         let item_y = panel_y + 74 + index * 52;
-        if index == 0 {
+        if index == state.launcher_selected_section {
             canvas.fill_rounded_rect(panel_x + 12, item_y, sidebar_width - 24, 44, 10, 0xFF20384D);
         }
         canvas.fill_rounded_rect(panel_x + 24, item_y + 12, 18, 18, 7, 0xFF4C79A6);
@@ -295,7 +296,11 @@ fn paint_launcher_surface(canvas: &mut Canvas<'_>, state: &CompositorState) {
             (panel_x + 54) as f32,
             (item_y + 28) as f32,
             18.0,
-            if index == 0 { 0xFFF4F7FB } else { 0xFFC8D2DE },
+            if index == state.launcher_selected_section {
+                0xFFF4F7FB
+            } else {
+                0xFFC8D2DE
+            },
             &section.label,
         );
     }
@@ -376,7 +381,7 @@ fn paint_launcher_surface(canvas: &mut Canvas<'_>, state: &CompositorState) {
         "Shut Down",
     );
 
-    for (index, entry) in state.launcher.entries.iter().take(8).enumerate() {
+    for (index, entry) in visible_entries.into_iter().take(8).enumerate() {
         let col = index % 4;
         let row = index / 4;
         let tile_x = panel_x + sidebar_width + 28 + col * 116;

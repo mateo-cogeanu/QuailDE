@@ -309,7 +309,9 @@ fn classify_desktop_entry(
     if categories.contains("Utility") || categories.contains("Settings") {
         return Some(AppCategory::Utility);
     }
-    None
+    // Falling back to Utility keeps broadly useful installed apps visible in
+    // the shell even when their desktop entry categories are unfamiliar.
+    Some(AppCategory::Utility)
 }
 
 fn sanitize_exec(exec: &str) -> Option<(String, Vec<String>)> {
@@ -324,7 +326,10 @@ fn sanitize_exec(exec: &str) -> Option<(String, Vec<String>)> {
 
     // Desktop entries often wrap the real command in `env VAR=... app`, so the
     // launcher strips that preamble and resolves the actual executable.
-    if parts.first().map(String::as_str) == Some("env") {
+    if matches!(
+        parts.first().map(String::as_str),
+        Some("env") | Some("/usr/bin/env")
+    ) {
         parts.remove(0);
         while parts.first().is_some_and(|part| part.contains('=')) {
             parts.remove(0);

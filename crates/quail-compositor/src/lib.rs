@@ -13,3 +13,4 @@ pub mod shell;
 pub mod software;
 pub mod state;
 pub mod terminal;
+pub mod theme;

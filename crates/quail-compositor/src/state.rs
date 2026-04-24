@@ -468,7 +468,7 @@ impl CompositorState {
 
         self.visible_launcher_entries()
             .iter()
-            .take(8)
+            .take(12)
             .enumerate()
             .find_map(|(index, entry)| {
                 let col = index % 4;
@@ -923,6 +923,14 @@ impl CompositorState {
         {
             self.launcher_search_query.push(ch);
             return true;
+        }
+
+        if self.launcher_open && linux_key_code == 28 {
+            if let Some(entry) = self.visible_launcher_entries().first() {
+                self.pending_launch = Some(entry.app_index);
+                self.launcher_open = false;
+                return true;
+            }
         }
 
         false

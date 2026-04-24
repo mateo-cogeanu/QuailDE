@@ -3,11 +3,11 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 
-use crate::apps::AppCategory;
 use crate::cursor::themed_cursor;
 use crate::render::Canvas;
 use crate::scene::{BufferSnapshot, SceneSurface};
 use crate::state::CompositorState;
+use crate::theme::{accent_for_category, shell_theme};
 
 /// SoftwareFrame summarizes the current in-memory composition result.
 #[derive(Debug, Clone)]
@@ -23,7 +23,7 @@ pub struct SoftwareFrame {
 pub fn compose_scene(state: &mut CompositorState) -> SoftwareFrame {
     let width = usize::try_from(state.composed_width).unwrap_or(1280);
     let height = usize::try_from(state.composed_height).unwrap_or(720);
-    let mut pixels = vec![0xFF101319_u32; width.saturating_mul(height)];
+    let mut pixels = vec![shell_theme().wallpaper_bottom; width.saturating_mul(height)];
     let mut painted_surfaces = 0;
 
     {
@@ -182,14 +182,22 @@ fn normalize_pixel(pixel: u32, format_name: &str) -> u32 {
 }
 
 fn paint_background(canvas: &mut Canvas<'_>) {
+    let theme = shell_theme();
     for y in 0..canvas.height {
         for x in 0..canvas.width {
-            let blue =
-                0x18_u32.saturating_add((y as u32).saturating_mul(0x28) / canvas.height as u32);
+            let mix_y = y as u32 * 255 / canvas.height.max(1) as u32;
+            let mix_x = x as u32 * 255 / canvas.width.max(1) as u32;
+            let top_r = (theme.wallpaper_top >> 16) & 0xFF;
+            let top_g = (theme.wallpaper_top >> 8) & 0xFF;
+            let top_b = theme.wallpaper_top & 0xFF;
+            let bottom_r = (theme.wallpaper_bottom >> 16) & 0xFF;
+            let bottom_g = (theme.wallpaper_bottom >> 8) & 0xFF;
+            let bottom_b = theme.wallpaper_bottom & 0xFF;
+            let red = ((top_r * (255 - mix_y) + bottom_r * mix_y) / 255).saturating_add(mix_x / 30);
             let green =
-                0x14_u32.saturating_add((x as u32).saturating_mul(0x14) / canvas.width as u32);
-            let red =
-                0x0F_u32.saturating_add((x as u32).saturating_mul(0x0E) / canvas.width as u32);
+                ((top_g * (255 - mix_y) + bottom_g * mix_y) / 255).saturating_add(mix_x / 24);
+            let blue =
+                ((top_b * (255 - mix_y) + bottom_b * mix_y) / 255).saturating_add(mix_x / 14);
             canvas.pixels[y * canvas.width + x] = 0xFF00_0000 | (red << 16) | (green << 8) | blue;
         }
     }
@@ -215,13 +223,13 @@ fn paint_background(canvas: &mut Canvas<'_>) {
         (canvas.width.min(canvas.height) as i32) / 4,
         0x3B261C38,
     );
-    canvas.glow(canvas.width as i32 - 180, 120, 170, 0x22E8A15B);
-    canvas.glow(220, 150, 220, 0x1A59B6FF);
+    canvas.glow(canvas.width as i32 - 180, 120, 170, theme.wallpaper_glow_a);
+    canvas.glow(220, 150, 220, theme.wallpaper_glow_b);
     canvas.glow(
         canvas.width as i32 / 2,
         canvas.height as i32 - 100,
         260,
-        0x1C8A5BFF,
+        theme.wallpaper_glow_c,
     );
     canvas.light_streak(canvas.width as i32 - 440, 140, 320, 0x15FFFFFF);
     canvas.light_streak(
@@ -233,6 +241,7 @@ fn paint_background(canvas: &mut Canvas<'_>) {
 }
 
 fn paint_launcher_surface(canvas: &mut Canvas<'_>, state: &CompositorState) {
+    let theme = shell_theme();
     let panel_width = canvas.width.min(780);
     let panel_height = canvas.height.min(620);
     let panel_x = 18;
@@ -246,40 +255,51 @@ fn paint_launcher_surface(canvas: &mut Canvas<'_>, state: &CompositorState) {
         panel_width,
         panel_height,
         24,
-        0x4410161E,
+        theme.surface_shadow,
     );
-    canvas.fill_rounded_rect(panel_x, panel_y, panel_width, panel_height, 20, 0xE5161A21);
+    canvas.fill_rounded_rect(
+        panel_x,
+        panel_y,
+        panel_width,
+        panel_height,
+        20,
+        theme.launcher_bg,
+    );
     canvas.fill_rounded_rect(
         panel_x + 1,
         panel_y + 1,
         panel_width.saturating_sub(2),
         58,
         20,
-        0xF01C222C,
+        theme.launcher_header,
     );
-    canvas.fill_rect(panel_x, panel_y + 58, panel_width, 1, 0xFF2B3240);
+    canvas.fill_rect(panel_x, panel_y + 58, panel_width, 1, theme.surface_border);
     canvas.fill_rounded_rect(
         panel_x + 278,
         panel_y + 14,
         panel_width.saturating_sub(334),
         34,
         11,
-        0xFF262D37,
+        theme.launcher_search,
     );
-    canvas.fill_rounded_rect(panel_x + 28, panel_y + 16, 26, 26, 13, 0xFF293545);
+    canvas.fill_rounded_rect(panel_x + 28, panel_y + 16, 26, 26, 13, theme.panel_button);
     canvas.text(
         (panel_x + 60) as f32,
         (panel_y + 34) as f32,
         22.0,
-        0xFFD7DFEA,
+        theme.text_primary,
         "QuailDE",
     );
     canvas.text(
         (panel_x + 302) as f32,
         (panel_y + 35) as f32,
         18.0,
-        0xAA9AA8B8,
-        "Search applications...",
+        theme.text_muted,
+        if state.launcher_search_query.is_empty() {
+            "Search applications..."
+        } else {
+            &state.launcher_search_query
+        },
     );
     canvas.fill_rounded_rect(
         panel_x + panel_width - 62,
@@ -308,17 +328,31 @@ fn paint_launcher_surface(canvas: &mut Canvas<'_>, state: &CompositorState) {
     for (index, section) in state.launcher.sections.iter().enumerate() {
         let item_y = panel_y + 74 + index * 52;
         if index == state.launcher_selected_section {
-            canvas.fill_rounded_rect(panel_x + 12, item_y, sidebar_width - 24, 44, 10, 0xFF20384D);
+            canvas.fill_rounded_rect(
+                panel_x + 12,
+                item_y,
+                sidebar_width - 24,
+                44,
+                10,
+                theme.launcher_sidebar_selected,
+            );
         }
-        canvas.fill_rounded_rect(panel_x + 24, item_y + 12, 18, 18, 7, 0xFF4C79A6);
+        canvas.fill_rounded_rect(
+            panel_x + 24,
+            item_y + 12,
+            18,
+            18,
+            7,
+            theme.launcher_sidebar_icon,
+        );
         canvas.text(
             (panel_x + 54) as f32,
             (item_y + 28) as f32,
             18.0,
             if index == state.launcher_selected_section {
-                0xFFF4F7FB
+                theme.text_primary
             } else {
-                0xFFC8D2DE
+                theme.text_secondary
             },
             &section.label,
         );
@@ -400,52 +434,66 @@ fn paint_launcher_surface(canvas: &mut Canvas<'_>, state: &CompositorState) {
         "Shut Down",
     );
 
-    for (index, entry) in visible_entries.into_iter().take(8).enumerate() {
+    for (index, entry) in visible_entries.into_iter().take(12).enumerate() {
         let col = index % 4;
         let row = index / 4;
         let tile_x = panel_x + sidebar_width + 28 + col * 116;
         let tile_y = panel_y + 86 + row * 128;
-        let color = match entry.category {
-            AppCategory::Terminal => 0xFF4C6FFF,
-            AppCategory::Browser => 0xFFFFA64D,
-            AppCategory::Files => 0xFF4CBF8A,
-            AppCategory::Editor => 0xFFB36DFF,
-            AppCategory::Utility => 0xFF8FA3BA,
-        };
+        let color = accent_for_category(entry.category);
         canvas.fill_rounded_rect(
             tile_x,
             tile_y,
             96,
             102,
             14,
-            if index == 0 { 0xFF24394E } else { 0xFF161B24 },
+            if index == 0 {
+                theme.launcher_tile_selected
+            } else {
+                theme.launcher_tile
+            },
         );
-        canvas.fill_rounded_rect(tile_x + 1, tile_y + 1, 94, 100, 13, 0x14FF_FFFF);
+        canvas.fill_rounded_rect(
+            tile_x + 1,
+            tile_y + 1,
+            94,
+            100,
+            13,
+            theme.launcher_tile_outline,
+        );
         canvas.fill_rounded_rect(tile_x + 22, tile_y + 14, 50, 50, 16, color);
         canvas.icon(&entry.icon_name, tile_x + 28, tile_y + 20, 38, 38);
         canvas.text(
             (tile_x + 10) as f32,
             (tile_y + 83) as f32,
             15.0,
-            0xFFD8E0EA,
+            theme.text_primary,
             &entry.label,
         );
         canvas.text(
             (tile_x + 10) as f32,
             (tile_y + 97) as f32,
             12.0,
-            0x887E8E9F,
+            theme.text_muted,
             &entry.subtitle,
         );
     }
+
+    canvas.text(
+        (panel_x + sidebar_width + 28) as f32,
+        (panel_y + panel_height - 25) as f32,
+        13.0,
+        theme.text_muted,
+        &format!("{} results", state.visible_launcher_entries().len()),
+    );
 }
 
 fn paint_bottom_panel(canvas: &mut Canvas<'_>, state: &CompositorState) {
+    let theme = shell_theme();
     let panel_height = 54;
     let panel_y = canvas.height.saturating_sub(panel_height);
     let (clock, date) = current_clock_strings();
-    canvas.fill_rect(0, panel_y, canvas.width, panel_height, 0xEE131821);
-    canvas.fill_rect(0, panel_y, canvas.width, 1, 0xFF2B3240);
+    canvas.fill_rect(0, panel_y, canvas.width, panel_height, theme.panel_bg);
+    canvas.fill_rect(0, panel_y, canvas.width, 1, theme.panel_border);
     canvas.fill_rounded_rect(
         12,
         panel_y + 7,
@@ -453,9 +501,9 @@ fn paint_bottom_panel(canvas: &mut Canvas<'_>, state: &CompositorState) {
         40,
         12,
         if state.launcher_open {
-            0xFF20384D
+            theme.panel_button_active
         } else {
-            0xFF202631
+            theme.panel_button
         },
     );
     canvas.fill_rounded_rect(22, panel_y + 17, 8, 8, 4, 0xFF59B6FF);
@@ -465,14 +513,8 @@ fn paint_bottom_panel(canvas: &mut Canvas<'_>, state: &CompositorState) {
 
     for (index, entry) in state.launcher.entries.iter().take(6).enumerate() {
         let icon_x = 68 + index * 52;
-        let color = match entry.category {
-            AppCategory::Terminal => 0xFF4C6FFF,
-            AppCategory::Browser => 0xFFFFA64D,
-            AppCategory::Files => 0xFF4CBF8A,
-            AppCategory::Editor => 0xFFB36DFF,
-            AppCategory::Utility => 0xFF8FA3BA,
-        };
-        canvas.fill_rounded_rect(icon_x, panel_y + 9, 36, 36, 10, 0xFF202631);
+        let color = accent_for_category(entry.category);
+        canvas.fill_rounded_rect(icon_x, panel_y + 9, 36, 36, 10, theme.panel_button);
         canvas.fill_rounded_rect(icon_x + 7, panel_y + 16, 22, 22, 7, color);
         canvas.icon(&entry.icon_name, icon_x + 5, panel_y + 14, 26, 26);
     }
@@ -486,9 +528,9 @@ fn paint_bottom_panel(canvas: &mut Canvas<'_>, state: &CompositorState) {
             30,
             10,
             if workspace == state.active_workspace {
-                0xFF274565
+                theme.panel_button_active
             } else {
-                0xFF1C2330
+                theme.panel_button
             },
         );
         canvas.text(
@@ -496,9 +538,9 @@ fn paint_bottom_panel(canvas: &mut Canvas<'_>, state: &CompositorState) {
             (panel_y + 31) as f32,
             14.0,
             if workspace == state.active_workspace {
-                0xFFF2F6FA
+                theme.text_primary
             } else {
-                0xFFA8B4C2
+                theme.text_secondary
             },
             &(workspace + 1).to_string(),
         );
@@ -512,16 +554,16 @@ fn paint_bottom_panel(canvas: &mut Canvas<'_>, state: &CompositorState) {
         32,
         10,
         if state.quick_settings_open {
-            0xFF263B53
+            theme.panel_button_active
         } else {
-            0xFF202631
+            theme.panel_button
         },
     );
     canvas.text(
         (quick_settings_x + 16) as f32,
         (panel_y + 31) as f32,
         14.0,
-        0xFFD5DFE9,
+        theme.text_primary,
         "Tools",
     );
 
@@ -533,35 +575,36 @@ fn paint_bottom_panel(canvas: &mut Canvas<'_>, state: &CompositorState) {
         32,
         10,
         if state.power_menu_open {
-            0xFF4A2C31
+            theme.overlay_card_alt
         } else {
-            0xFF282027
+            theme.panel_button
         },
     );
     canvas.text(
         (power_x + 14) as f32,
         (panel_y + 31) as f32,
         14.0,
-        0xFFF0D7DB,
+        theme.text_warning,
         "P",
     );
     canvas.text(
         (canvas.width.saturating_sub(92)) as f32,
         (panel_y + 25) as f32,
         18.0,
-        0xFFD8E0EA,
+        theme.text_primary,
         &clock,
     );
     canvas.text(
         (canvas.width.saturating_sub(122)) as f32,
         (panel_y + 40) as f32,
         12.0,
-        0x889FB0C2,
+        theme.text_muted,
         &date,
     );
 }
 
 fn paint_builtin_terminal(frame: &mut [u32], width: usize, height: usize, state: &CompositorState) {
+    let theme = shell_theme();
     let terminal = state.terminal.snapshot();
     if !terminal.visible || terminal.workspace != state.active_workspace {
         return;
@@ -603,9 +646,9 @@ fn paint_builtin_terminal(frame: &mut [u32], width: usize, height: usize, state:
         terminal_width,
         terminal_height,
         20,
-        0x44101720,
+        theme.surface_shadow,
     );
-    canvas.fill_rounded_rect(x, y, terminal_width, terminal_height, 18, 0xF611141A);
+    canvas.fill_rounded_rect(x, y, terminal_width, terminal_height, 18, theme.terminal_bg);
     canvas.fill_rounded_rect(
         x.saturating_add(1),
         y.saturating_add(1),
@@ -613,9 +656,9 @@ fn paint_builtin_terminal(frame: &mut [u32], width: usize, height: usize, state:
         title_height,
         18,
         if terminal.focused {
-            0xFF1B2430
+            theme.terminal_header_focused
         } else {
-            0xFF171E27
+            theme.terminal_header
         },
     );
     canvas.fill_rect(
@@ -623,7 +666,7 @@ fn paint_builtin_terminal(frame: &mut [u32], width: usize, height: usize, state:
         y + title_height,
         terminal_width.saturating_sub(2),
         1,
-        0xFF293240,
+        theme.surface_border,
     );
     canvas.fill_rounded_rect(
         x.saturating_add(12),
@@ -631,17 +674,24 @@ fn paint_builtin_terminal(frame: &mut [u32], width: usize, height: usize, state:
         terminal_width.saturating_sub(24),
         terminal_height.saturating_sub(title_height + 24),
         12,
-        0xFF0A0E13,
+        theme.terminal_content,
     );
-    canvas.fill_rounded_rect(close_button_x, close_button_y, 18, 18, 9, 0xFF4A2028);
+    canvas.fill_rounded_rect(
+        close_button_x,
+        close_button_y,
+        18,
+        18,
+        9,
+        theme.overlay_card_alt,
+    );
     canvas.text(
         (x + 18) as f32,
         (y + 28) as f32,
         16.0,
         if terminal.focused {
-            0xFFF3F6FA
+            theme.text_primary
         } else {
-            0xFFC3CCD7
+            theme.text_secondary
         },
         &terminal.title,
     );
@@ -649,14 +699,14 @@ fn paint_builtin_terminal(frame: &mut [u32], width: usize, height: usize, state:
         (x + terminal_width.saturating_sub(164)) as f32,
         (y + 28) as f32,
         13.0,
-        0x88B5C4D4,
+        theme.text_muted,
         &format!("Workspace {}", terminal.workspace + 1),
     );
     canvas.text(
         (close_button_x + 5) as f32,
         (close_button_y + 14) as f32,
         14.0,
-        0xFFF4D9DD,
+        theme.text_warning,
         "x",
     );
 
@@ -670,7 +720,7 @@ fn paint_builtin_terminal(frame: &mut [u32], width: usize, height: usize, state:
             (x + 18) as f32,
             baseline_y as f32,
             16.0,
-            0xFFD8E7D3,
+            theme.text_primary,
             &clipped,
         );
     }
@@ -678,7 +728,7 @@ fn paint_builtin_terminal(frame: &mut [u32], width: usize, height: usize, state:
     if terminal.focused {
         let caret_row = lines.len().saturating_sub(1);
         let caret_y = y + title_height + 15 + caret_row * line_height;
-        canvas.fill_rect(x + 18, caret_y, 2, 16, 0xFF8CE36D);
+        canvas.fill_rect(x + 18, caret_y, 2, 16, theme.terminal_caret);
     }
 
     canvas.fill_rect(
@@ -686,13 +736,13 @@ fn paint_builtin_terminal(frame: &mut [u32], width: usize, height: usize, state:
         y + terminal_height.saturating_sub(28),
         terminal_width.saturating_sub(24),
         1,
-        0xFF232C38,
+        theme.surface_border,
     );
     canvas.text(
         (x + 18) as f32,
         (y + terminal_height.saturating_sub(10)) as f32,
         13.0,
-        0x889AB0A0,
+        theme.text_muted,
         "Shell: PTY session  |  Enter commands, arrows, tab, backspace, shift",
     );
 }
@@ -753,6 +803,7 @@ fn paint_window_frame(
     surface: &SceneSurface,
     focused: bool,
 ) {
+    let theme = shell_theme();
     let Some(buffer) = surface.committed_buffer.as_ref() else {
         return;
     };
@@ -764,15 +815,23 @@ fn paint_window_frame(
     let window_height = usize::try_from(buffer.height.max(0))
         .unwrap_or(0)
         .saturating_add(40);
-    let body_color = if focused { 0xFF131922 } else { 0xFF171D27 };
-    let title_color = if focused { 0xFF1F2D40 } else { 0xFF202733 };
+    let body_color = if focused {
+        theme.window_bg_focused
+    } else {
+        theme.window_bg
+    };
+    let title_color = if focused {
+        theme.window_header_focused
+    } else {
+        theme.window_header
+    };
 
     let mut canvas = Canvas {
         pixels: frame,
         width,
         height,
     };
-    canvas.fill_rounded_rect(x, y, window_width, window_height, 16, 0x6611161D);
+    canvas.fill_rounded_rect(x, y, window_width, window_height, 16, theme.surface_shadow);
     canvas.fill_rounded_rect(
         x + 3,
         y + 3,
@@ -796,14 +855,18 @@ fn paint_window_frame(
         (x + 84) as f32,
         (y + 24) as f32,
         14.0,
-        if focused { 0xFFDFE6F1 } else { 0xAAB5C0CD },
+        if focused {
+            theme.text_primary
+        } else {
+            theme.text_secondary
+        },
         &surface.window_title,
     );
     canvas.text(
         (x + window_width.saturating_sub(86)) as f32,
         (y + 24) as f32,
         12.0,
-        0x889AA7B4,
+        theme.text_muted,
         &format!("WS {}", surface.workspace + 1),
     );
 }
@@ -820,6 +883,7 @@ fn clip_terminal_line(line: &str, content_width: usize) -> String {
 }
 
 fn paint_quick_settings(canvas: &mut Canvas<'_>, state: &CompositorState) {
+    let theme = shell_theme();
     let panel_x = canvas.width.saturating_sub(286);
     let panel_y = canvas.height.saturating_sub(270);
     let rows = [
@@ -861,47 +925,62 @@ fn paint_quick_settings(canvas: &mut Canvas<'_>, state: &CompositorState) {
         ),
         ("Volume", &format!("{}%", state.volume_level), 0xFFE58A95),
     ];
-    canvas.fill_rounded_rect(panel_x + 10, panel_y + 12, 268, 208, 22, 0x4410141D);
-    canvas.fill_rounded_rect(panel_x, panel_y, 268, 208, 20, 0xF2141820);
+    canvas.fill_rounded_rect(
+        panel_x + 10,
+        panel_y + 12,
+        268,
+        208,
+        22,
+        theme.surface_shadow,
+    );
+    canvas.fill_rounded_rect(panel_x, panel_y, 268, 208, 20, theme.overlay_card);
     canvas.text(
         (panel_x + 18) as f32,
         (panel_y + 28) as f32,
         18.0,
-        0xFFE4EAF2,
+        theme.text_primary,
         "Quick Settings",
     );
     for (index, (label, value, accent)) in rows.iter().enumerate() {
         let item_y = panel_y + 52 + index * 34;
-        canvas.fill_rounded_rect(panel_x + 14, item_y, 240, 26, 9, 0xFF1A222D);
+        canvas.fill_rounded_rect(panel_x + 14, item_y, 240, 26, 9, theme.overlay_card_alt);
         canvas.fill_rounded_rect(panel_x + 18, item_y + 5, 16, 16, 6, *accent);
         canvas.text(
             (panel_x + 42) as f32,
             (item_y + 19) as f32,
             14.0,
-            0xFFD8E0EA,
+            theme.text_primary,
             label,
         );
         canvas.text(
             (panel_x + 190) as f32,
             (item_y + 19) as f32,
             13.0,
-            0x88B0BFCE,
+            theme.text_muted,
             value,
         );
     }
 }
 
 fn paint_power_menu(canvas: &mut Canvas<'_>, state: &CompositorState) {
+    let theme = shell_theme();
     let panel_x = canvas.width.saturating_sub(224);
     let panel_y = canvas.height.saturating_sub(246);
     let actions = ["Lock", "Log Out", "Restart", "Shut Down"];
-    canvas.fill_rounded_rect(panel_x + 8, panel_y + 10, 196, 212, 22, 0x4410141D);
-    canvas.fill_rounded_rect(panel_x, panel_y, 196, 212, 20, 0xF218161B);
+    canvas.fill_rounded_rect(
+        panel_x + 8,
+        panel_y + 10,
+        196,
+        212,
+        22,
+        theme.surface_shadow,
+    );
+    canvas.fill_rounded_rect(panel_x, panel_y, 196, 212, 20, theme.overlay_card);
     canvas.text(
         (panel_x + 18) as f32,
         (panel_y + 28) as f32,
         18.0,
-        0xFFEADCE0,
+        theme.text_warning,
         "Power",
     );
     for (index, action) in actions.iter().enumerate() {
@@ -913,9 +992,9 @@ fn paint_power_menu(canvas: &mut Canvas<'_>, state: &CompositorState) {
             28,
             10,
             if *action == "Shut Down" {
-                0xFF332127
+                theme.overlay_card_alt
             } else {
-                0xFF1D222C
+                theme.surface_alt_bg
             },
         );
         canvas.text(
@@ -923,9 +1002,9 @@ fn paint_power_menu(canvas: &mut Canvas<'_>, state: &CompositorState) {
             (item_y + 20) as f32,
             15.0,
             if *action == "Shut Down" {
-                0xFFF0D7DB
+                theme.text_warning
             } else {
-                0xFFD8E0EA
+                theme.text_primary
             },
             action,
         );
@@ -934,30 +1013,31 @@ fn paint_power_menu(canvas: &mut Canvas<'_>, state: &CompositorState) {
         (panel_x + 18) as f32,
         (panel_y + 194) as f32,
         12.0,
-        0x889FB0C2,
+        theme.text_muted,
         &format!("Workspace {}", state.active_workspace + 1),
     );
 }
 
 fn paint_notifications(canvas: &mut Canvas<'_>, state: &CompositorState) {
+    let theme = shell_theme();
     for (index, notification) in state.notifications.iter().rev().take(3).enumerate() {
         let toast_y = 22 + index * 58;
         let toast_x = canvas.width.saturating_sub(344);
-        canvas.fill_rounded_rect(toast_x + 10, toast_y + 8, 300, 48, 18, 0x33101620);
-        canvas.fill_rounded_rect(toast_x, toast_y, 300, 48, 16, 0xE5151A22);
+        canvas.fill_rounded_rect(toast_x + 10, toast_y + 8, 300, 48, 18, theme.surface_shadow);
+        canvas.fill_rounded_rect(toast_x, toast_y, 300, 48, 16, theme.overlay_card);
         canvas.fill_rounded_rect(toast_x + 14, toast_y + 14, 10, 20, 5, 0xFF4CBF8A);
         canvas.text(
             (toast_x + 34) as f32,
             (toast_y + 20) as f32,
             14.0,
-            0xFFDDE5EE,
+            theme.text_primary,
             "QuailDE",
         );
         canvas.text(
             (toast_x + 34) as f32,
             (toast_y + 36) as f32,
             13.0,
-            0x88C4D0DA,
+            theme.text_muted,
             notification,
         );
     }

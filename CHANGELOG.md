@@ -5,6 +5,8 @@
 - Routed Linux keyboard input through the built-in terminal before focused clients when the terminal has focus, and painted the terminal as live shell text instead of another static shell placeholder so QuailDE relies less on decorative rectangle-only UI.
 - Made the built-in terminal more usable for daily shell work by adding shifted symbol support, caps lock awareness, more navigation keys, a status footer, and workspace-aware visibility so it behaves more like a real desktop terminal window.
 - Added the first everyday shell features around the compositor: workspace switching from the panel, launcher search typing, shell notifications, a quick-settings popover for common toggles, a simple power menu, and workspace-aware routing for newly created client surfaces.
+- Reworked shell theming around a dedicated `theme` module so the panel, launcher, terminal, window chrome, notifications, and overlays now share one cohesive dark palette instead of relying on scattered hard-coded colors.
+- Broadened launcher app coverage by classifying unknown desktop entries as launchable utility apps, recognizing `/usr/bin/env` desktop-entry wrappers, showing more launcher tiles at once, and letting `Enter` launch the first search result so installed apps are easier to start.
 
 ## 2026-04-21
 - Added a repo-local workflow in `AGENTS.md` to keep code comments, changelog updates, and GitHub pushes top of mind for every change.

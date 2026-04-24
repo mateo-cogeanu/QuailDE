@@ -36,6 +36,38 @@ Right now QuailDE contains:
 
 QuailDE also now uses KDE Plasma's local [`plasma-workspace`](/Users/mateocogeanu/Downloads/QuailDE/vendor/plasma-workspace) checkout as a customization base. The current plan is to turn that upstream shell into a heavily modified Quail-flavored desktop rather than continue betting everything on the experimental compositor prototype alone. The active Plasma-side modifications are also preserved as [`patches/plasma-workspace-quail.patch`](/Users/mateocogeanu/Downloads/QuailDE/patches/plasma-workspace-quail.patch) so the main repo can track the customization work without vendoring the entire KDE workspace into Git history.
 
+Right now the Plasma path is the one to actually try on Linux. The Rust compositor prototype is still kept here as an earlier experiment, but the practical shell work is happening in the local `plasma-workspace` checkout and the tracked patch file.
+
+## Try The Plasma Build On Linux
+
+To try the Plasma-based QuailDE work, you need a Linux machine with the Plasma 6 / Qt 6 / KDE Frameworks development dependencies required by `plasma-workspace`.
+
+The repo now includes helper scripts for the dev flow:
+
+```bash
+cd /Users/mateocogeanu/Downloads/QuailDE
+./scripts/build-plasma-workspace.sh
+./scripts/install-plasma-dev-session.sh
+```
+
+What those do:
+
+- build the modified local [`vendor/plasma-workspace`](/Users/mateocogeanu/Downloads/QuailDE/vendor/plasma-workspace) checkout into `~/.local/quail-plasma`
+- install the generated Plasma dev session metadata so your login manager can offer the custom session
+
+After that:
+
+1. log out
+2. choose the built-from-source Plasma Wayland dev session on the login screen
+3. sign in and select the `Quail Masterpiece` global theme if it is not already active
+
+If you already use Plasma and only want the custom theme/layout without rebuilding the shell, you can copy the look-and-feel package directly:
+
+```bash
+mkdir -p ~/.local/share/plasma/look-and-feel
+cp -R /Users/mateocogeanu/Downloads/QuailDE/vendor/plasma-workspace/lookandfeel/org.quail.masterpiece ~/.local/share/plasma/look-and-feel/
+```
+
 ## Run it
 
 ```bash
@@ -126,11 +158,10 @@ Notes:
 
 ## Near-term roadmap
 
-- harden shared-memory buffers and software composition
-- harden raw Linux focus and pointer behavior beyond the desktop root
-- replace legacy modeset startup with a more complete DRM/KMS path
-- paint the first visible shell surface
-- add panel, launcher, and notifications
-- make QuailDE usable for terminal/browser/editor workflows
+- deepen the Plasma-side customization instead of keeping the shell close to stock
+- keep cutting steady-state shell work without flattening the visual polish
+- replace more default Plasma branding and behavior with Quail-owned identity
+- make the Linux build and dev-session workflow easier to reproduce
+- keep the old compositor prototype available for experimentation without making it the main path
 
 See [`docs/vision.md`](docs/vision.md) and [`docs/architecture.md`](docs/architecture.md).

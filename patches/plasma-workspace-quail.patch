@@ -1,15 +1,31 @@
+diff --git a/applets/kicker/appsmodel.cpp b/applets/kicker/appsmodel.cpp
+index 06e6123..525403e 100644
+--- a/applets/kicker/appsmodel.cpp
++++ b/applets/kicker/appsmodel.cpp
+@@ -50,7 +50,9 @@ AppsModel::AppsModel(const QString &entryPath, bool paginate, int pageSize, bool
+     if (m_entryPath.isEmpty()) {
+         m_changeTimer = new QTimer(this);
+         m_changeTimer->setSingleShot(true);
+-        m_changeTimer->setInterval(100ms);
++        // Debounce sycoca bursts so one package update or app install does not
++        // force the launcher to rebuild its tree repeatedly in quick succession.
++        m_changeTimer->setInterval(225ms);
+         connect(m_changeTimer, SIGNAL(timeout()), this, SLOT(refresh()));
+ 
+         connect(KSycoca::self(), &KSycoca::databaseChanged, this, [this]() {
 diff --git a/applets/kicker/runnermodel.cpp b/applets/kicker/runnermodel.cpp
-index c303585..f57fa05 100644
+index c303585..ee03c99 100644
 --- a/applets/kicker/runnermodel.cpp
 +++ b/applets/kicker/runnermodel.cpp
-@@ -27,7 +27,9 @@ RunnerModel::RunnerModel(QObject *parent)
+@@ -27,7 +27,10 @@ RunnerModel::RunnerModel(QObject *parent)
      , m_krunnerConfig(KSharedConfig::openConfig(QStringLiteral("krunnerrc")))
  {
      m_queryTimer.setSingleShot(true);
 -    m_queryTimer.setInterval(10ms);
-+    // A short debounce batches fast typing into fewer runner queries, which
-+    // makes the launcher feel steadier on slower systems without adding much delay.
-+    m_queryTimer.setInterval(35ms);
++    // A slightly longer debounce trims runner wakeups during very fast typing,
++    // which keeps launcher search responsive on mid-range systems without
++    // making the results feel delayed to the user.
++    m_queryTimer.setInterval(45ms);
      connect(&m_queryTimer, &QTimer::timeout, this, &RunnerModel::startQuery);
      const auto readFavorites = [this]() {
          m_favoritePluginIds = m_krunnerConfig
@@ -25,68 +41,6 @@ index 1b76309..090e8a0 100644
  
  ecm_add_qml_module(components URI "org.kde.breeze.components" NO_GENERATE_PLUGIN_SOURCE)
  ecm_target_qml_sources(components SOURCES
-diff --git a/shell/panelview.cpp b/shell/panelview.cpp
-index 152226b..2bc260d 100644
---- a/shell/panelview.cpp
-+++ b/shell/panelview.cpp
-@@ -172,12 +172,17 @@ bool PanelView::isUnsupportedEnvironment() const
- 
- bool PanelView::defaultFloating() const
- {
--    return isUnsupportedEnvironment() ? false : true;
-+    // Quail Masterpiece prefers a grounded panel by default. This trims blur
-+    // and floating transitions out of the hottest shell path for steadier
-+    // frame times on everyday hardware while still allowing users to opt back in.
-+    return false;
- }
- 
- PanelView::OpacityMode PanelView::defaultOpacityMode() const
- {
--    return isUnsupportedEnvironment() ? PanelView::OpacityMode::Translucent : PanelView::OpacityMode::Adaptive;
-+    // Opaque panels avoid the adaptive translucency tracking work that can make
-+    // the shell feel heavier during window motion and rapid desktop changes.
-+    return PanelView::OpacityMode::Opaque;
- }
- 
- KConfigGroup PanelView::panelConfig(ShellCorona *corona, Plasma::Containment *containment, QScreen *screen)
-diff --git a/shell/shellcorona.cpp b/shell/shellcorona.cpp
-index 88bcaef..28e7700 100644
---- a/shell/shellcorona.cpp
-+++ b/shell/shellcorona.cpp
-@@ -81,7 +81,9 @@
- using namespace std::chrono_literals;
- using namespace Qt::StringLiterals;
- 
--static const int s_configSyncDelay = 10000; // 10 seconds
-+// A slightly longer sync interval reduces layout-config churn during bursts of
-+// panel and containment changes without making settings persistence feel slow.
-+static const int s_configSyncDelay = 15000; // 15 seconds
- 
- Q_DECLARE_METATYPE(QColor)
- 
-diff --git a/lookandfeel/org.quail.masterpiece/metadata.json b/lookandfeel/org.quail.masterpiece/metadata.json
-new file mode 100644
-index 0000000..8af1f6b
---- /dev/null
-+++ b/lookandfeel/org.quail.masterpiece/metadata.json
-@@ -0,0 +1,17 @@
-+{
-+    "KPackageStructure": "Plasma/LookAndFeel",
-+    "KPlugin": {
-+        "Authors": [
-+            {
-+                "Email": "mateocogeanu@users.noreply.github.com",
-+                "Name": "QuailDE"
-+            }
-+        ],
-+        "Category": "",
-+        "Description": "A darker, tighter, performance-minded Plasma look and feel for QuailDE.",
-+        "Id": "org.quail.masterpiece.desktop",
-+        "License": "GPLv2+",
-+        "Name": "Quail Masterpiece",
-+        "Website": "https://invent.kde.org/plasma/plasma-workspace"
-+    }
-+}
 diff --git a/lookandfeel/org.quail.masterpiece/contents/defaults b/lookandfeel/org.quail.masterpiece/contents/defaults
 new file mode 100644
 index 0000000..b0746fb
@@ -142,3 +96,139 @@ index 0000000..d697350
 +for (var j = 0; j < desktopsArray.length; j++) {
 +    desktopsArray[j].wallpaperPlugin = "org.kde.image";
 +}
+diff --git a/lookandfeel/org.quail.masterpiece/metadata.json b/lookandfeel/org.quail.masterpiece/metadata.json
+new file mode 100644
+index 0000000..8af1f6b
+--- /dev/null
++++ b/lookandfeel/org.quail.masterpiece/metadata.json
+@@ -0,0 +1,17 @@
++{
++    "KPackageStructure": "Plasma/LookAndFeel",
++    "KPlugin": {
++        "Authors": [
++            {
++                "Email": "mateocogeanu@users.noreply.github.com",
++                "Name": "QuailDE"
++            }
++        ],
++        "Category": "",
++        "Description": "A darker, tighter, performance-minded Plasma look and feel for QuailDE.",
++        "Id": "org.quail.masterpiece.desktop",
++        "License": "GPLv2+",
++        "Name": "Quail Masterpiece",
++        "Website": "https://invent.kde.org/plasma/plasma-workspace"
++    }
++}
+diff --git a/shell/panelview.cpp b/shell/panelview.cpp
+index 152226b..9549793 100644
+--- a/shell/panelview.cpp
++++ b/shell/panelview.cpp
+@@ -172,12 +172,17 @@ bool PanelView::isUnsupportedEnvironment() const
+ 
+ bool PanelView::defaultFloating() const
+ {
+-    return isUnsupportedEnvironment() ? false : true;
++    // Quail Masterpiece prefers a grounded panel by default. This trims blur
++    // and floating transitions out of the hottest shell path for steadier
++    // frame times on everyday hardware while still allowing users to opt back in.
++    return false;
+ }
+ 
+ PanelView::OpacityMode PanelView::defaultOpacityMode() const
+ {
+-    return isUnsupportedEnvironment() ? PanelView::OpacityMode::Translucent : PanelView::OpacityMode::Adaptive;
++    // Opaque panels avoid the adaptive translucency tracking work that can make
++    // the shell feel heavier during window motion and rapid desktop changes.
++    return PanelView::OpacityMode::Opaque;
+ }
+ 
+ KConfigGroup PanelView::panelConfig(ShellCorona *corona, Plasma::Containment *containment, QScreen *screen)
+@@ -1445,7 +1450,12 @@ void PanelView::updateMask()
+         mask = QRegion(QRect(screenPanelRect));
+     }
+ 
+-    if (m_backgroundHints == Plasma::Types::NoBackground) {
++    const bool useCompositingEffects = m_backgroundHints != Plasma::Types::NoBackground && !(opacityMode() == PanelView::OpacityMode::Opaque && !floating());
++
++    if (!useCompositingEffects) {
++        // Opaque grounded panels already have a full background, so skipping
++        // blur and contrast work keeps the panel hot path lighter without
++        // changing its visible shape or solidity.
+         KWindowEffects::enableBlurBehind(this, false);
+         KWindowEffects::enableBackgroundContrast(this, false);
+     } else {
+@@ -1975,9 +1985,13 @@ void PanelView::updateFloating()
+     updateExclusiveZone();
+     updateShadows();
+ 
+-    // positionPanel and updateMask are called by m_floatingnessAnimation
+-    if (m_floatingnessAnimation.targetObject()) {
++    // Skip the animation machinery when the panel is already at the requested
++    // floatingness. This avoids needless geometry and mask churn on no-op updates.
++    if (m_floatingnessAnimation.targetObject() && !qFuzzyCompare(m_floatingnessAnimation.startValue().toDouble() + 1.0, m_floatingnessAnimation.endValue().toDouble() + 1.0)) {
+         m_floatingnessAnimation.start();
++    } else {
++        m_floatingness = m_floatingnessAnimation.endValue().toDouble();
++        updateMask();
+     }
+ }
+ 
+diff --git a/shell/scripting/configgroup.cpp b/shell/scripting/configgroup.cpp
+index 7250b5f..7caf991 100644
+--- a/shell/scripting/configgroup.cpp
++++ b/shell/scripting/configgroup.cpp
+@@ -44,10 +44,11 @@ ConfigGroup::ConfigGroup(QObject *parent)
+     : QObject(parent)
+     , d(new ConfigGroupPrivate(this))
+ {
+-    // Delay and compress everything within 5 seconds into one sync
++    // Delay and compress rapid config writes so shell-side scripting does less
++    // repeated disk work while widgets or layouts are being adjusted.
+     d->synchTimer = new QTimer(this);
+     d->synchTimer->setSingleShot(true);
+-    d->synchTimer->setInterval(1500ms);
++    d->synchTimer->setInterval(2500ms);
+     connect(d->synchTimer, &QTimer::timeout, this, &ConfigGroup::sync);
+ }
+ 
+diff --git a/shell/shellcorona.cpp b/shell/shellcorona.cpp
+index 88bcaef..eb2d5b6 100644
+--- a/shell/shellcorona.cpp
++++ b/shell/shellcorona.cpp
+@@ -81,7 +81,9 @@
+ using namespace std::chrono_literals;
+ using namespace Qt::StringLiterals;
+ 
+-static const int s_configSyncDelay = 10000; // 10 seconds
++// A longer sync interval reduces layout-config churn during bursts of panel
++// and containment changes without making settings persistence feel slow.
++static const int s_configSyncDelay = 20000; // 20 seconds
+ 
+ Q_DECLARE_METATYPE(QColor)
+ 
+@@ -139,7 +141,9 @@ void ShellCorona::init()
+     connect(this, &Corona::configSynced, this, &ShellCorona::syncAppConfig);
+ 
+     m_waitingPanelsTimer.setSingleShot(true);
+-    m_waitingPanelsTimer.setInterval(250ms);
++    // Batch panel creation requests that arrive together while screens and
++    // containments are still settling during startup and hotplug events.
++    m_waitingPanelsTimer.setInterval(400ms);
+     connect(&m_waitingPanelsTimer, &QTimer::timeout, this, &ShellCorona::createWaitingPanels);
+ 
+     connect(this, &Corona::containmentAdded, this, [this](Plasma::Containment *cont) {
+diff --git a/startkde/plasma-session/startup.cpp b/startkde/plasma-session/startup.cpp
+index b66ebe7..431a425 100644
+--- a/startkde/plasma-session/startup.cpp
++++ b/startkde/plasma-session/startup.cpp
+@@ -127,7 +127,9 @@ void SleepJob::start()
+     connect(t, &QTimer::timeout, this, [this]() {
+         emitResult();
+     });
+-    t->start(100);
++    // Keep the phase barrier, but shorten the idle wait so Plasma reaches the
++    // usable desktop a little faster on clean Wayland sessions.
++    t->start(60);
+ }
+ 
+ Startup::Startup(QObject *parent)

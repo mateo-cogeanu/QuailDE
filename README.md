@@ -52,8 +52,13 @@ cd /Users/mateocogeanu/Downloads/QuailDE
 
 What those do:
 
-- build the modified local [`vendor/plasma-workspace`](/Users/mateocogeanu/Downloads/QuailDE/vendor/plasma-workspace) checkout into `~/.local/quail-plasma`
+- clone KDE's upstream `plasma-workspace` into [`vendor/plasma-workspace`](/Users/mateocogeanu/Downloads/QuailDE/vendor/plasma-workspace) if it is missing
+- check out the pinned upstream base revision used by this repo's tracked Plasma patch
+- apply [`patches/plasma-workspace-quail.patch`](/Users/mateocogeanu/Downloads/QuailDE/patches/plasma-workspace-quail.patch) automatically
+- build the modified local Plasma checkout into `~/.local/quail-plasma`
 - install the generated Plasma dev session metadata so your login manager can offer the custom session
+
+If you already have your own Plasma checkout and want to use that instead, set `SOURCE_DIR=/path/to/plasma-workspace` before running the build script.
 
 After that:
 

@@ -1,6 +1,10 @@
 # Changelog
 
 ## 2026-04-24
+- Added a vendored `plasma-workspace` checkout under `vendor/plasma-workspace` so QuailDE can evolve as a heavily customized Plasma-based desktop instead of only a from-scratch shell experiment.
+- Added a custom Plasma look-and-feel package at `vendor/plasma-workspace/lookandfeel/org.quail.masterpiece`, giving the project its own branded dark defaults and a denser, less effect-heavy panel layout script.
+- Tuned Plasma shell defaults for responsiveness by preferring non-floating opaque panels in `panelview.cpp`, extending `ShellCorona`'s config sync interval to reduce churn, and slightly debouncing Kicker runner queries so launcher search batches rapid typing more efficiently.
+- Stored the current Plasma customization work as `patches/plasma-workspace-quail.patch` and ignored the live `vendor/plasma-workspace` clone in the root repo, so the QuailDE Git history stays valid without trying to vendor the entire upstream KDE workspace.
 - Added a built-in PTY-backed `Quail Terminal` so QuailDE can launch and focus a real first-party terminal surface from the panel and launcher even on minimal Linux installs without a working external Wayland terminal.
 - Routed Linux keyboard input through the built-in terminal before focused clients when the terminal has focus, and painted the terminal as live shell text instead of another static shell placeholder so QuailDE relies less on decorative rectangle-only UI.
 - Made the built-in terminal more usable for daily shell work by adding shifted symbol support, caps lock awareness, more navigation keys, a status footer, and workspace-aware visibility so it behaves more like a real desktop terminal window.

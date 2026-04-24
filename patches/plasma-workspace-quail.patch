@@ -1,0 +1,144 @@
+diff --git a/applets/kicker/runnermodel.cpp b/applets/kicker/runnermodel.cpp
+index c303585..f57fa05 100644
+--- a/applets/kicker/runnermodel.cpp
++++ b/applets/kicker/runnermodel.cpp
+@@ -27,7 +27,9 @@ RunnerModel::RunnerModel(QObject *parent)
+     , m_krunnerConfig(KSharedConfig::openConfig(QStringLiteral("krunnerrc")))
+ {
+     m_queryTimer.setSingleShot(true);
+-    m_queryTimer.setInterval(10ms);
++    // A short debounce batches fast typing into fewer runner queries, which
++    // makes the launcher feel steadier on slower systems without adding much delay.
++    m_queryTimer.setInterval(35ms);
+     connect(&m_queryTimer, &QTimer::timeout, this, &RunnerModel::startQuery);
+     const auto readFavorites = [this]() {
+         m_favoritePluginIds = m_krunnerConfig
+diff --git a/lookandfeel/CMakeLists.txt b/lookandfeel/CMakeLists.txt
+index 1b76309..090e8a0 100644
+--- a/lookandfeel/CMakeLists.txt
++++ b/lookandfeel/CMakeLists.txt
+@@ -1,6 +1,7 @@
+ plasma_install_package(org.kde.breeze org.kde.breeze.desktop look-and-feel lookandfeel)
+ plasma_install_package(org.kde.breezedark org.kde.breezedark.desktop look-and-feel lookandfeel)
+ plasma_install_package(org.kde.breezetwilight org.kde.breezetwilight.desktop look-and-feel lookandfeel)
++plasma_install_package(org.quail.masterpiece org.quail.masterpiece.desktop look-and-feel lookandfeel)
+ 
+ ecm_add_qml_module(components URI "org.kde.breeze.components" NO_GENERATE_PLUGIN_SOURCE)
+ ecm_target_qml_sources(components SOURCES
+diff --git a/shell/panelview.cpp b/shell/panelview.cpp
+index 152226b..2bc260d 100644
+--- a/shell/panelview.cpp
++++ b/shell/panelview.cpp
+@@ -172,12 +172,17 @@ bool PanelView::isUnsupportedEnvironment() const
+ 
+ bool PanelView::defaultFloating() const
+ {
+-    return isUnsupportedEnvironment() ? false : true;
++    // Quail Masterpiece prefers a grounded panel by default. This trims blur
++    // and floating transitions out of the hottest shell path for steadier
++    // frame times on everyday hardware while still allowing users to opt back in.
++    return false;
+ }
+ 
+ PanelView::OpacityMode PanelView::defaultOpacityMode() const
+ {
+-    return isUnsupportedEnvironment() ? PanelView::OpacityMode::Translucent : PanelView::OpacityMode::Adaptive;
++    // Opaque panels avoid the adaptive translucency tracking work that can make
++    // the shell feel heavier during window motion and rapid desktop changes.
++    return PanelView::OpacityMode::Opaque;
+ }
+ 
+ KConfigGroup PanelView::panelConfig(ShellCorona *corona, Plasma::Containment *containment, QScreen *screen)
+diff --git a/shell/shellcorona.cpp b/shell/shellcorona.cpp
+index 88bcaef..28e7700 100644
+--- a/shell/shellcorona.cpp
++++ b/shell/shellcorona.cpp
+@@ -81,7 +81,9 @@
+ using namespace std::chrono_literals;
+ using namespace Qt::StringLiterals;
+ 
+-static const int s_configSyncDelay = 10000; // 10 seconds
++// A slightly longer sync interval reduces layout-config churn during bursts of
++// panel and containment changes without making settings persistence feel slow.
++static const int s_configSyncDelay = 15000; // 15 seconds
+ 
+ Q_DECLARE_METATYPE(QColor)
+ 
+diff --git a/lookandfeel/org.quail.masterpiece/metadata.json b/lookandfeel/org.quail.masterpiece/metadata.json
+new file mode 100644
+index 0000000..8af1f6b
+--- /dev/null
++++ b/lookandfeel/org.quail.masterpiece/metadata.json
+@@ -0,0 +1,17 @@
++{
++    "KPackageStructure": "Plasma/LookAndFeel",
++    "KPlugin": {
++        "Authors": [
++            {
++                "Email": "mateocogeanu@users.noreply.github.com",
++                "Name": "QuailDE"
++            }
++        ],
++        "Category": "",
++        "Description": "A darker, tighter, performance-minded Plasma look and feel for QuailDE.",
++        "Id": "org.quail.masterpiece.desktop",
++        "License": "GPLv2+",
++        "Name": "Quail Masterpiece",
++        "Website": "https://invent.kde.org/plasma/plasma-workspace"
++    }
++}
+diff --git a/lookandfeel/org.quail.masterpiece/contents/defaults b/lookandfeel/org.quail.masterpiece/contents/defaults
+new file mode 100644
+index 0000000..b0746fb
+--- /dev/null
++++ b/lookandfeel/org.quail.masterpiece/contents/defaults
+@@ -0,0 +1,24 @@
++[kdeglobals][KDE]
++widgetStyle=Breeze
++
++[kdeglobals][General]
++ColorScheme=BreezeDark
++
++[kdeglobals][Icons]
++Theme=breeze-dark
++
++[plasmarc][Theme]
++name=default
++
++[Wallpaper]
++Image=Next
++
++[kcminputrc][Mouse]
++cursorTheme=breeze_cursors
++
++[kwinrc][org.kde.kdecoration2]
++library=org.kde.breeze
++theme=Breeze
++
++[KSplash]
++Theme=org.kde.Breeze
+diff --git a/lookandfeel/org.quail.masterpiece/contents/layouts/org.kde.plasma.desktop-layout.js b/lookandfeel/org.quail.masterpiece/contents/layouts/org.kde.plasma.desktop-layout.js
+new file mode 100644
+index 0000000..d697350
+--- /dev/null
++++ b/lookandfeel/org.quail.masterpiece/contents/layouts/org.kde.plasma.desktop-layout.js
+@@ -0,0 +1,19 @@
++loadTemplate("org.kde.plasma.desktop.defaultPanel")
++
++// Quail Masterpiece keeps the stock Plasma widget set, but it tunes the first
++// panel toward a denser, less effect-heavy layout for a faster daily desktop.
++var panelArray = panels();
++if (panelArray.length > 0) {
++    var panel = panelArray[0];
++    panel.location = "bottom";
++    panel.alignment = "center";
++    panel.height = 40;
++    panel.floating = false;
++    panel.opacity = "opaque";
++    panel.hiding = "none";
++}
++
++var desktopsArray = desktopsForActivity(currentActivity());
++for (var j = 0; j < desktopsArray.length; j++) {
++    desktopsArray[j].wallpaperPlugin = "org.kde.image";
++}

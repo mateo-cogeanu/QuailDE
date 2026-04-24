@@ -34,6 +34,8 @@ Right now QuailDE contains:
 - architecture and vision docs
 - a project layout that can expand into a real shell
 
+QuailDE also now uses KDE Plasma's local [`plasma-workspace`](/Users/mateocogeanu/Downloads/QuailDE/vendor/plasma-workspace) checkout as a customization base. The current plan is to turn that upstream shell into a heavily modified Quail-flavored desktop rather than continue betting everything on the experimental compositor prototype alone. The active Plasma-side modifications are also preserved as [`patches/plasma-workspace-quail.patch`](/Users/mateocogeanu/Downloads/QuailDE/patches/plasma-workspace-quail.patch) so the main repo can track the customization work without vendoring the entire KDE workspace into Git history.
+
 ## Run it
 
 ```bash
